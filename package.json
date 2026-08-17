@@ -1,0 +1,29 @@
+{
+  "name": "ledger-method",
+  "version": "0.1.0",
+  "description": "CLI for the Ledger Method — a structured, attribution-tracked, AI-assisted development workflow.",
+  "type": "module",
+  "main": "src/cli.js",
+  "bin": {
+    "ledger": "./bin/ledger.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\""
+  },
+  "keywords": [
+    "cli",
+    "methodology",
+    "ai-assisted-development"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.117.1",
+    "commander": "^15.0.0",
+    "gray-matter": "^4.0.3",
+    "prompts": "^2.4.2"
+  }
+}
