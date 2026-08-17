@@ -1,8 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { findProjectRoot, ledgerRoot, indexFile, LEDGER_DIRNAME } from '../lib/paths.js';
+import { findProjectRoot, ledgerRoot, indexFile, configFile, LEDGER_DIRNAME } from '../lib/paths.js';
 import { createEmptyIndex, saveIndex } from '../lib/index-store.js';
 import { stageAndCommit } from '../lib/git.js';
+import { saveConfig, DEFAULT_PROVIDER } from '../lib/ai-providers/provider.js';
 
 export async function init() {
   const root = findProjectRoot();
@@ -18,9 +19,11 @@ export async function init() {
   fs.writeFileSync(path.join(ledger, 'Errors', '.gitkeep'), '');
 
   saveIndex(createEmptyIndex());
+  saveConfig({ aiProvider: DEFAULT_PROVIDER });
 
   const relPaths = [
     path.relative(root, indexFile()),
+    path.relative(root, configFile()),
     path.relative(root, path.join(ledger, 'Errors', '.gitkeep')),
   ];
 

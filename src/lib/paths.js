@@ -42,6 +42,10 @@ export function indexFile() {
   return path.join(ledgerRoot(), 'index.json');
 }
 
+export function configFile() {
+  return path.join(ledgerRoot(), 'config.json');
+}
+
 export function dashboardFile() {
   return path.join(ledgerRoot(), 'index.html');
 }

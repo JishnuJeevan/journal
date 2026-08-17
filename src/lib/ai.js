@@ -1,44 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk';
-
-const MODEL = process.env.LEDGER_MODEL || 'claude-sonnet-5';
-
-let client;
-function getClient() {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw new Error(
-      'ANTHROPIC_API_KEY is not set. The Ledger Method uses Claude for list-features, ' +
-        'list-steps, and draft-logic — export ANTHROPIC_API_KEY and try again.'
-    );
-  }
-  if (!client) client = new Anthropic();
-  return client;
-}
-
-async function complete(system, user, { maxTokens = 2000 } = {}) {
-  const anthropic = getClient();
-  const res = await anthropic.messages.create({
-    model: MODEL,
-    max_tokens: maxTokens,
-    system,
-    messages: [{ role: 'user', content: user }],
-  });
-  return res.content
-    .filter((block) => block.type === 'text')
-    .map((block) => block.text)
-    .join('');
-}
-
-function extractJson(text) {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = fenced ? fenced[1] : text;
-  try {
-    return JSON.parse(candidate);
-  } catch (err) {
-    throw new Error(
-      `Claude did not return parseable JSON: ${err.message}\n---\n${text}\n---`
-    );
-  }
-}
+import { getProvider } from './ai-providers/provider.js';
 
 export async function proposeFeatures(brainDump) {
   const system = `You help decompose a software project description into a list of discrete
@@ -50,13 +10,10 @@ Respond with ONLY a JSON array, no prose, no markdown fences. Each element:
 
 Propose 3-10 features. Slugs must be unique, lowercase, kebab-case, filesystem-safe.`;
 
-  const text = await complete(system, brainDump);
-  const parsed = extractJson(text);
-  if (!Array.isArray(parsed)) throw new Error('Expected a JSON array of features from Claude.');
+  const parsed = await getProvider().generate(brainDump, { system, structured: true });
+  if (!Array.isArray(parsed)) throw new Error('Expected a JSON array of features from the AI provider.');
   return parsed;
 }
-
-const DEFAULT_STEPS = ['logic', 'code', 'test', 'document'];
 
 export async function proposeSteps(feature, description) {
   const system = `You propose a step pipeline for a feature in the Ledger Method, a development
@@ -71,13 +28,12 @@ Respond with ONLY a JSON object, no prose, no markdown fences:
 Steps must be lowercase, kebab-case, filesystem-safe identifiers, in pipeline order.
 "logic" and "code" should almost always be first and second respectively.`;
 
-  const text = await complete(
-    system,
-    `Feature: ${feature}\nDescription: ${description || '(no description provided)'}`
+  const parsed = await getProvider().generate(
+    `Feature: ${feature}\nDescription: ${description || '(no description provided)'}`,
+    { system, structured: true }
   );
-  const parsed = extractJson(text);
   if (!Array.isArray(parsed.steps) || parsed.steps.length === 0) {
-    throw new Error('Expected { steps: string[] } from Claude.');
+    throw new Error('Expected { steps: string[] } from the AI provider.');
   }
   return parsed;
 }
@@ -91,12 +47,9 @@ concrete attempt (not vague hand-waving), in plain prose and short bullet lists 
 Do not write code. Respond with the markdown content only — no frontmatter, no code fences around
 the whole thing, no meta-commentary about being a draft (the tool adds that banner itself).`;
 
-  const text = await complete(
-    system,
+  const text = await getProvider().generate(
     `Feature: ${feature}\nDescription: ${description || '(no description provided)'}`,
-    { maxTokens: 1500 }
+    { system, structured: false }
   );
   return text.trim();
 }
-
-export { DEFAULT_STEPS };
