@@ -47,8 +47,11 @@ export function buildProgram() {
     .action(run((feature, opts) => listSteps(feature, opts)));
 
   program
-    .command('draft-logic <feature>')
-    .description('AI drafts a starting point for the Logic step — review and edit before committing')
+    .command('draft-logic <feature> [brainDump]')
+    .description(
+      'AI drafts a starting point for the Logic step — review and edit before committing. ' +
+        'Pass a free-form brain dump to ground the draft in your own reasoning instead of AI improvisation.'
+    )
     .action(run(draftLogic));
 
   for (const step of ['logic', 'code', 'test', 'document']) {

@@ -55,3 +55,32 @@ test('draftLogic requests plain text and trims it', async () => {
   assert.equal(stub.calls[0].options.structured, false);
   assert.equal(result, 'Some draft logic text.');
 });
+
+test('draftLogic without a brain dump uses the improvise system prompt', async () => {
+  const stub = new StubProvider('draft');
+  _setProviderForTesting(stub);
+
+  await draftLogic('auth', 'login flow');
+
+  assert.match(stub.calls[0].options.system, /genuine, concrete attempt/);
+  assert.doesNotMatch(stub.calls[0].prompt, /brain dump/);
+});
+
+test('draftLogic with a brain dump grounds the draft in it', async () => {
+  const stub = new StubProvider('draft');
+  _setProviderForTesting(stub);
+
+  await draftLogic('auth', 'login flow', '  users log in with email + magic link  ');
+
+  assert.match(stub.calls[0].options.system, /take THEIR reasoning/);
+  assert.match(stub.calls[0].prompt, /Author's brain dump:\nusers log in with email \+ magic link/);
+});
+
+test('draftLogic treats a whitespace-only brain dump as absent', async () => {
+  const stub = new StubProvider('draft');
+  _setProviderForTesting(stub);
+
+  await draftLogic('auth', 'login flow', '   ');
+
+  assert.match(stub.calls[0].options.system, /genuine, concrete attempt/);
+});

@@ -168,7 +168,7 @@ After the one-time bootstrap (or from day one, on a brand-new project), new feat
 | `list-features` | Takes a free-form project description (brain dump) and proposes a list of features. Used at the start of a project or a new phase of work. |
 | `add-feature` | Adds a single new feature, described by the user, before any code is written for it. The ongoing (non-bootstrap) way features get added over time. |
 | `list-steps <feature>` | Proposes a step pipeline for a given feature (default: Logic/Code/Test/Document, may suggest additions like QA/Verification). Human reviews and confirms before it's locked in. |
-| `draft-logic <feature>` | AI drafts a starting point for the Logic step. Explicitly framed as a draft — human is expected to edit before committing. |
+| `draft-logic <feature> ["<brain dump>"]` | AI drafts a starting point for the Logic step. Bare form improvises from the feature's name + description; with a brain dump, AI instead organizes the human's own raw reasoning into a coherent draft rather than inventing it. Explicitly framed as a draft either way — human is expected to edit before committing. |
 | `commit-logic <feature>` | Records attribution + commits the Logic file + writes to `LEDGER/index.json` (see §6.4). |
 | `commit-code <feature>` | Records attribution + commits real project code + syncs snapshot into LEDGER + writes to `LEDGER/index.json`. |
 | `commit-test <feature>` | Records attribution + commits the Test file + writes to `LEDGER/index.json`. |

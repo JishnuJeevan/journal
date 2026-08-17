@@ -38,18 +38,38 @@ Steps must be lowercase, kebab-case, filesystem-safe identifiers, in pipeline or
   return parsed;
 }
 
-export async function draftLogic(feature, description) {
-  const system = `You draft a starting point for the "Logic" step of a feature in the Ledger
-Method. Logic is a high-level, human-understandable description of how a feature should work —
-the reasoning, not the implementation. This draft exists ONLY to give a human something to react
-to, edit, and correct — it is explicitly not meant to be accepted as-is. Write it as a genuine,
-concrete attempt (not vague hand-waving), in plain prose and short bullet lists where useful.
-Do not write code. Respond with the markdown content only — no frontmatter, no code fences around
-the whole thing, no meta-commentary about being a draft (the tool adds that banner itself).`;
+export async function draftLogic(feature, description, brainDump) {
+  const groundedSystem = `You draft a starting point for the "Logic" step of a feature in the
+Ledger Method. Logic is a high-level, human-understandable description of how a feature should
+work — the reasoning, not the implementation. This draft exists ONLY to give a human something to
+react to, edit, and correct — it is explicitly not meant to be accepted as-is.
 
-  const text = await getProvider().generate(
-    `Feature: ${feature}\nDescription: ${description || '(no description provided)'}`,
-    { system, structured: false }
-  );
+The human has given you their own raw, half-formed thinking about this feature below (a "brain
+dump"). Your job is NOT to invent the logic yourself — it's to take THEIR reasoning and organize
+it into a coherent, well-structured draft: clarify ambiguous points, surface gaps or unstated
+assumptions as open questions, and put it in plain prose and short bullet lists where useful. Stay
+grounded in what they actually wrote; don't introduce major decisions they didn't make. Do not
+write code. Respond with the markdown content only — no frontmatter, no code fences around the
+whole thing, no meta-commentary about being a draft (the tool adds that banner itself).`;
+
+  const improviseSystem = `You draft a starting point for the "Logic" step of a feature in the
+Ledger Method. Logic is a high-level, human-understandable description of how a feature should
+work — the reasoning, not the implementation. This draft exists ONLY to give a human something to
+react to, edit, and correct — it is explicitly not meant to be accepted as-is. Write it as a
+genuine, concrete attempt (not vague hand-waving), in plain prose and short bullet lists where
+useful. Do not write code. Respond with the markdown content only — no frontmatter, no code
+fences around the whole thing, no meta-commentary about being a draft (the tool adds that banner
+itself).`;
+
+  const hasBrainDump = Boolean(brainDump && brainDump.trim());
+
+  const prompt = hasBrainDump
+    ? `Feature: ${feature}\nDescription: ${description || '(no description provided)'}\n\nAuthor's brain dump:\n${brainDump.trim()}`
+    : `Feature: ${feature}\nDescription: ${description || '(no description provided)'}`;
+
+  const text = await getProvider().generate(prompt, {
+    system: hasBrainDump ? groundedSystem : improviseSystem,
+    structured: false,
+  });
   return text.trim();
 }

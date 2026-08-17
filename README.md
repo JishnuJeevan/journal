@@ -53,8 +53,13 @@ ledger list-steps user-authentication
 # → AI proposes a step pipeline (default: logic, code, test, document), you confirm/edit
 
 ledger draft-logic user-authentication
-# → AI drafts a starting point for LEDGER/features/user-authentication/logic/logic.md
-#   edit it into your own words, then:
+# → AI improvises a starting point for LEDGER/features/user-authentication/logic/logic.md
+#   from the feature's name + description alone
+
+ledger draft-logic user-authentication "users log in with email + magic link, session in a cookie, ..."
+# → AI instead organizes YOUR brain dump into a coherent draft, grounded in what you wrote
+
+# either way, edit the draft into your own words, then:
 ledger commit-logic user-authentication --attribution person
 
 # ... write the actual code in src/, then:
@@ -80,7 +85,7 @@ Any `--attribution` can be omitted and you'll be prompted interactively instead.
 | `ledger init` | Scaffold `LEDGER/` in the current git repo. |
 | `ledger list-features "<brain dump>"` | AI proposes features; you confirm which to register. |
 | `ledger list-steps <feature> [-d "description"]` | AI proposes a step pipeline; you confirm/edit, then it's locked in. |
-| `ledger draft-logic <feature>` | AI drafts a starting point for the Logic step. |
+| `ledger draft-logic <feature> ["<brain dump>"]` | AI drafts a starting point for the Logic step — improvised from the feature's description alone, or organized from your own brain dump if you pass one. |
 | `ledger commit-logic\|commit-code\|commit-test\|commit-document <feature> [-a person\|ai\|person+ai]` | Commit that step, recording attribution and SHA into `LEDGER/index.json`. |
 | `ledger commit <feature> <step>` | Generic form of the above, for custom steps (e.g. `qa`, `verification`). |
 | `ledger new-column <feature>` | Start a new revision pass; resets working files for all of the feature's steps. |
