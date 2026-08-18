@@ -1,7 +1,7 @@
 import path from 'node:path';
 import prompts from 'prompts';
 import { findProjectRoot } from '../lib/paths.js';
-import { loadIndex, saveIndex } from '../lib/index-store.js';
+import { loadIndex, saveIndex, newFeatureEntry } from '../lib/index-store.js';
 import { indexFile } from '../lib/paths.js';
 import { stageAndCommit } from '../lib/git.js';
 import { proposeFeatures } from '../lib/ai.js';
@@ -19,7 +19,7 @@ export async function listFeatures(brainDump) {
 
   const choices = proposed.map((f) => ({
     title: `${f.name}${known.has(f.slug) ? ' (already registered)' : ''}`,
-    description: `${f.slug} — ${f.description}`,
+    description: `${f.slug} — ${f.description}${f.group ? ` [${f.group}]` : ''}`,
     value: f,
     selected: !known.has(f.slug),
     disabled: known.has(f.slug),
@@ -27,7 +27,9 @@ export async function listFeatures(brainDump) {
 
   console.log('Proposed features:');
   for (const f of proposed) {
-    console.log(`  - ${f.slug}: ${f.description}${known.has(f.slug) ? '  [already registered]' : ''}`);
+    console.log(
+      `  - ${f.slug}: ${f.description}${f.group ? ` (group: ${f.group})` : ''}${known.has(f.slug) ? '  [already registered]' : ''}`
+    );
   }
   console.log('');
 
@@ -45,14 +47,7 @@ export async function listFeatures(brainDump) {
   }
 
   for (const f of selected) {
-    index.features[f.slug] = {
-      name: f.name,
-      description: f.description,
-      steps: null,
-      codePaths: [],
-      currentColumn: null,
-      columns: [],
-    };
+    index.features[f.slug] = newFeatureEntry({ name: f.name, description: f.description, group: f.group ?? null });
   }
   saveIndex(index);
 

@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ledger — Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1a1a1a; --muted: #666; --border: #e2e2e2; --card: #fafafa;
+    --person: #059669; --ai: #2563eb; --none: #999;
+    --accent-bg: #eaf1fb; --accent-border: #2563eb; --accent-fg: #1d4ed8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#15161a; --fg:#e7e7e9; --muted:#9a9aa2; --border:#2b2c33; --card:#1c1d22;
+      --person:#34d399; --ai:#60a5fa; --none:#8a8a92;
+      --accent-bg:#16233a; --accent-border:#3b82f6; --accent-fg:#93c5fd;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--fg); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; padding: 2rem; max-width: 900px; margin-inline: auto; }
+  h1 { margin: 0 0 0.25rem; font-size: 1.4rem; }
+  .generated { color: var(--muted); font-size: 0.8rem; margin: 0 0 1.5rem; }
+
+  .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 1.5rem; flex-wrap: wrap; }
+  .toolbar input[type=text] { padding: 0.4rem 0.6rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); max-width: 220px; }
+  .legend { display: flex; gap: 14px; font-size: 0.75rem; color: var(--muted); align-items: center; flex-wrap: wrap; }
+  .legend .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; }
+  .toolbar label { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--muted); cursor: pointer; }
+
+  .group-label { font-size: 0.75rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 1.5rem 0 0.6rem; }
+  .group-label:first-of-type { margin-top: 0; }
+
+  .feature { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 0.75rem; }
+  .feature.removed { opacity: 0.55; border-style: dashed; }
+  .feature-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+  .feature-head .name { font-weight: 600; font-size: 1rem; }
+  .feature-head .slug { color: var(--muted); font-size: 0.8rem; margin-left: 6px; font-weight: normal; }
+  .feature-head .status { font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
+  .feature .desc { color: var(--muted); font-size: 0.85rem; margin: 0 0 0.6rem; }
+  .removed-tag { text-decoration: line-through; }
+
+  .version-row { display: flex; align-items: center; gap: 6px; margin-bottom: 0.6rem; flex-wrap: wrap; }
+  .version-row .label { font-size: 0.7rem; color: var(--muted); margin-right: 2px; }
+  .v-chip { font-size: 0.75rem; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--border); background: none; color: var(--fg); cursor: pointer; }
+  .v-chip.active { border-color: var(--accent-border); background: var(--accent-bg); color: var(--accent-fg); }
+
+  .step-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 8px; margin-bottom: 0.5rem; }
+  .step-btn { display: flex; align-items: center; justify-content: space-between; border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; background: var(--bg); text-decoration: none; color: var(--fg); font-size: 0.8rem; }
+  .step-btn .step-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-left: 6px; }
+  .no-pipeline { font-size: 0.8rem; color: var(--muted); font-style: italic; }
+
+  .paths { font-size: 0.75rem; color: var(--muted); margin: 0 0 0.6rem; }
+  .paths a { color: var(--ai); text-decoration: none; }
+  .paths a:hover { text-decoration: underline; }
+
+  .errors-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; background: var(--bg); color: var(--fg); font-size: 0.8rem; cursor: pointer; text-align: left; }
+  .errors-toggle .open-count { color: #b45309; font-weight: 600; }
+  @media (prefers-color-scheme: dark) { .errors-toggle .open-count { color: #fbbf24; } }
+  .errors-panel { display: none; margin-top: 8px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .errors-panel.expanded { display: block; }
+  .error-entry { padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 0.78rem; }
+  .error-entry:last-child { border-bottom: none; }
+  .error-entry .entry-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 3px; }
+  .error-entry .status-open { color: #b45309; font-weight: 600; }
+  .error-entry .status-resolved { color: var(--person); font-weight: 600; }
+  @media (prefers-color-scheme: dark) { .error-entry .status-open { color: #fbbf24; } }
+  .error-entry .desc { color: var(--fg); margin: 0 0 3px; white-space: pre-wrap; }
+  .error-entry .fix { color: var(--muted); margin: 0; }
+  .error-entry .fix .fix-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 4px; }
+  .error-entry .date { color: var(--muted); font-size: 0.72rem; }
+
+  .empty-note { font-size: 0.85rem; color: var(--muted); text-align: center; padding: 2rem 0; }
+</style>
+</head>
+<body>
+
+  <h1>Ledger Dashboard</h1>
+  <p class="generated" id="generatedNote"></p>
+
+  <div class="toolbar">
+    <input type="text" id="search" placeholder="Search features...">
+    <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+      <div class="legend">
+        <span><span class="dot" style="background:var(--person)"></span>person</span>
+        <span><span class="dot" style="background:var(--ai)"></span>ai</span>
+        <span><span class="dot" style="background:var(--none)"></span>not set</span>
+      </div>
+      <label><input type="checkbox" id="showRemoved"> Show removed</label>
+    </div>
+  </div>
+
+  <div id="app"></div>
+  <p class="empty-note" id="emptyNote" style="display:none;">No features match your search.</p>
+
+<script>
+/* =========================================================================
+   DATA — build-dashboard replaces LEDGER_DATA below with the real contents
+   translated from LEDGER/index.json. Everything from this line down to
+   "RENDERING LOGIC" is sample data only, demonstrating the expected shape —
+   delete it once wired to real data.
+
+   Shape reference:
+
+   {
+     generatedAt: ISO timestamp string,
+     features: [
+       {
+         slug: string,
+         name: string,
+         description: string,
+         group: string | null,           // null -> shown under "Ungrouped"
+         removed: boolean,
+         codePaths: string[],            // real relative paths, rendered as links
+         steps: string[],                // ordered pipeline for this feature,
+                                          // e.g. ["logic","code","test","document"]
+                                          // or with a custom step appended
+         pipelineSet: boolean,           // false -> "pipeline not set" shown, no steps grid
+         versions: [
+           {
+             version: number,
+             current: boolean,
+             stepData: {
+               // key = step name from `steps` above
+               logic: {
+                 attribution: "person" | "ai" | "legacy" | null,  // null -> "not set"
+                 sha: string | null,
+                 date: string | null,
+                 fileUrl: string | null   // relative path/link to the real file for this version
+               },
+               ... one entry per step in `steps`
+             }
+           }
+           // one entry per version; only the `current: true` version is shown by default
+         ],
+         errors: [
+           {
+             id: number,
+             status: "open" | "resolved",
+             loggedDate: string,
+             description: string,           // the error/output as logged
+             fixNote: string | null,        // null while still open
+             resolvedDate: string | null,
+             attribution: "person" | "ai" | null   // who ran resolve-error; null while open
+           }
+           // omit entirely or leave [] for a feature with no logged errors —
+           // the Errors toggle is only rendered when this array is non-empty
+         ]
+       }
+       // one entry per feature, including removed ones (removed: true) — the
+       // renderer hides them by default, don't omit them from the data
+     ]
+   }
+   ========================================================================= */
+
+const LEDGER_DATA = {
+  generatedAt: "2026-08-18T00:00:00.000Z",
+  features: [
+    {
+      // Demonstrates: multiple versions (chips + switching), grouped feature, code path links
+      slug: "user-login",
+      name: "User login",
+      description: "Authenticates a user's credentials and starts a session.",
+      group: "authentication",
+      removed: false,
+      codePaths: ["src/auth/login.js", "src/auth/session.js"],
+      steps: ["logic", "code", "test", "document"],
+      pipelineSet: true,
+      versions: [
+        {
+          version: 1, current: false,
+          stepData: {
+            logic: { attribution: "ai", sha: "0ff6a67", date: "2026-08-10", fileUrl: "LEDGER/features/user-login/logic/logic.md" },
+            code: { attribution: "ai", sha: "3009b59", date: "2026-08-10", fileUrl: "LEDGER/features/user-login/code/" },
+            test: { attribution: "person", sha: "932bc8c", date: "2026-08-10", fileUrl: "LEDGER/features/user-login/test/test.md" },
+            document: { attribution: "ai", sha: "5536251", date: "2026-08-10", fileUrl: "LEDGER/features/user-login/document/document.md" }
+          }
+        },
+        {
+          version: 2, current: true,
+          stepData: {
+            logic: { attribution: "person", sha: "a1b2c3d", date: "2026-08-17", fileUrl: "LEDGER/features/user-login/logic/logic.md" },
+            code: { attribution: "person", sha: "e4f5a6b", date: "2026-08-17", fileUrl: "LEDGER/features/user-login/code/" },
+            test: { attribution: "person", sha: "c7d8e9f", date: "2026-08-17", fileUrl: "LEDGER/features/user-login/test/test.md" },
+            document: { attribution: null, sha: null, date: null, fileUrl: null }
+          }
+        }
+      ],
+      errors: [
+        {
+          id: 1, status: "resolved",
+          loggedDate: "2026-08-16",
+          description: "TypeError: Cannot read properties of undefined (reading 'token')\n  at validateSession (session.js:18)",
+          fixNote: "validateSession assumed a session always exists; added a check for the logged-out case.",
+          resolvedDate: "2026-08-16",
+          attribution: "person"
+        },
+        {
+          id: 2, status: "open",
+          loggedDate: "2026-08-17",
+          description: "Login succeeds but the session token isn't persisted across a page refresh.",
+          fixNote: null,
+          resolvedDate: null,
+          attribution: null
+        }
+      ]
+    },
+    {
+      // Demonstrates: same group as above, but pipeline not yet locked in
+      slug: "password-reset",
+      name: "Password reset",
+      description: "Lets a user reset their password via a time-limited email link.",
+      group: "authentication",
+      removed: false,
+      codePaths: [],
+      steps: [],
+      pipelineSet: false,
+      versions: []
+    },
+    {
+      // Demonstrates: ungrouped feature, single version (no chips shown)
+      slug: "data-export",
+      name: "Data export",
+      description: "Exports the user's data as a downloadable CSV file.",
+      group: null,
+      removed: false,
+      codePaths: ["src/export/csvBuilder.js"],
+      steps: ["logic", "code", "test", "document"],
+      pipelineSet: true,
+      versions: [
+        {
+          version: 1, current: true,
+          stepData: {
+            logic: { attribution: "person", sha: "7f2a9c1", date: "2026-08-15", fileUrl: "LEDGER/features/data-export/logic/logic.md" },
+            code: { attribution: "person", sha: "b3d8e02", date: "2026-08-15", fileUrl: "LEDGER/features/data-export/code/" },
+            test: { attribution: null, sha: null, date: null, fileUrl: null },
+            document: { attribution: null, sha: null, date: null, fileUrl: null }
+          }
+        }
+      ]
+    },
+    {
+      // Demonstrates: removed feature, hidden by default via the toggle
+      slug: "legacy-report-generator",
+      name: "Legacy report generator",
+      description: "Superseded by data-export; kept here as a removed record.",
+      group: null,
+      removed: true,
+      codePaths: [],
+      steps: ["logic", "code"],
+      pipelineSet: true,
+      versions: [
+        { version: 1, current: true, stepData: {
+          logic: { attribution: "person", sha: "9f8e7d6", date: "2026-08-01", fileUrl: "LEDGER/features/legacy-report-generator/logic/logic.md" },
+          code: { attribution: "ai", sha: "1a2b3c4", date: "2026-08-01", fileUrl: "LEDGER/features/legacy-report-generator/code/" }
+        }}
+      ]
+    }
+  ]
+};
+
+/* =========================================================================
+   RENDERING LOGIC — reusable as-is. Feed it LEDGER_DATA (or real data in
+   the same shape) via renderDashboard(). No need to touch this per build.
+   ========================================================================= */
+
+const DOT_COLOR = { person: "var(--person)", ai: "var(--ai)", legacy: "var(--none)", none: "var(--none)" };
+const STEP_LABEL = s => s.charAt(0).toUpperCase() + s.slice(1);
+
+function currentVersion(feature) {
+  return feature.versions.find(v => v.current) || feature.versions[feature.versions.length - 1];
+}
+
+function stepCountLabel(feature) {
+  if (!feature.pipelineSet) return "pipeline not set";
+  const v = currentVersion(feature);
+  if (!v) return "0 / " + feature.steps.length + " steps";
+  const done = feature.steps.filter(s => v.stepData[s] && v.stepData[s].attribution).length;
+  return done + " / " + feature.steps.length + " steps · v" + v.version;
+}
+
+function renderStepGrid(feature, version) {
+  if (!feature.pipelineSet) {
+    return '<p class="no-pipeline">Step pipeline not yet locked in — run <code>ledger list-steps ' + feature.slug + '</code>.</p>';
+  }
+  const cells = feature.steps.map(step => {
+    const sd = (version && version.stepData[step]) || {};
+    const color = sd.attribution ? DOT_COLOR[sd.attribution] : DOT_COLOR.none;
+    const inner = '<span>' + STEP_LABEL(step) + '</span><span class="step-dot" style="background:' + color + '"></span>';
+    return sd.fileUrl
+      ? '<a class="step-btn" href="' + sd.fileUrl + '">' + inner + '</a>'
+      : '<span class="step-btn" style="opacity:0.6; cursor:default;">' + inner + '</span>';
+  }).join("");
+  return '<div class="step-grid">' + cells + '</div>';
+}
+
+function renderVersionChips(feature) {
+  if (feature.versions.length <= 1) return "";
+  const chips = feature.versions.map(v =>
+    '<button class="v-chip' + (v.current ? ' active' : '') + '" data-slug="' + feature.slug + '" data-v="' + v.version + '">v' + v.version + (v.current ? " · current" : "") + '</button>'
+  ).join("");
+  return '<div class="version-row"><span class="label">Version</span>' + chips + '</div>';
+}
+
+function renderErrorsSection(feature) {
+  const errors = feature.errors || [];
+  if (!errors.length) return "";
+  const openCount = errors.filter(e => e.status === "open").length;
+  const label = openCount > 0
+    ? '<span>Errors <span class="open-count">(' + openCount + ' open)</span></span>'
+    : '<span>Errors (' + errors.length + ', all resolved)</span>';
+  const entries = errors.slice().reverse().map(e => {
+    const statusHtml = e.status === "open"
+      ? '<span class="status-open">Open</span>'
+      : '<span class="status-resolved">Resolved</span>';
+    const fixHtml = e.status === "resolved"
+      ? '<p class="fix"><span class="fix-dot" style="background:' + (DOT_COLOR[e.attribution] || DOT_COLOR.none) + '"></span>' + e.fixNote + '</p>'
+      : '<p class="fix" style="font-style:italic;">Not yet resolved.</p>';
+    return (
+      '<div class="error-entry">' +
+        '<div class="entry-head">' + statusHtml + '<span class="date">' + e.loggedDate + '</span></div>' +
+        '<p class="desc">' + e.description + '</p>' +
+        fixHtml +
+      '</div>'
+    );
+  }).join("");
+  return (
+    '<button class="errors-toggle" data-slug="' + feature.slug + '">' + label + '<span>▾</span></button>' +
+    '<div class="errors-panel" id="errors-' + feature.slug + '">' + entries + '</div>'
+  );
+}
+
+function renderFeature(feature) {
+  const v = currentVersion(feature);
+  const nameHtml = feature.removed
+    ? '<span class="name removed-tag">' + feature.name + '</span>'
+    : '<span class="name">' + feature.name + '</span>';
+  const paths = feature.codePaths.length
+    ? '<p class="paths">' + feature.codePaths.map(p => '<a href="' + p + '">' + p + '</a>').join(' <span style="color:var(--border)">·</span> ') + '</p>'
+    : "";
+  return (
+    '<div class="feature' + (feature.removed ? ' removed' : '') + '" data-slug="' + feature.slug + '" data-search="' + (feature.name + " " + feature.slug + " " + feature.description).toLowerCase() + '">' +
+      '<div class="feature-head">' +
+        '<div>' + nameHtml + '<span class="slug">' + feature.slug + '</span></div>' +
+        '<span class="status">' + (feature.removed ? "removed" : stepCountLabel(feature)) + '</span>' +
+      '</div>' +
+      '<p class="desc">' + feature.description + '</p>' +
+      renderVersionChips(feature) +
+      renderStepGrid(feature, v) +
+      paths +
+      renderErrorsSection(feature) +
+    '</div>'
+  );
+}
+
+function renderDashboard(data) {
+  document.getElementById("generatedNote").textContent =
+    "Generated " + data.generatedAt + " by ledger build-dashboard. Never hand-edit this file.";
+
+  const groups = {};
+  data.features.forEach(f => {
+    const key = f.group || "Ungrouped";
+    (groups[key] = groups[key] || []).push(f);
+  });
+
+  const groupNames = Object.keys(groups).sort((a, b) => a === "Ungrouped" ? 1 : b === "Ungrouped" ? -1 : a.localeCompare(b));
+  const html = groupNames.map(g =>
+    '<div class="group-label">' + g + '</div>' + groups[g].map(renderFeature).join("")
+  ).join("");
+
+  document.getElementById("app").innerHTML = html;
+  wireInteractions();
+  applyFilters();
+}
+
+function wireInteractions() {
+  document.querySelectorAll(".v-chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      const slug = chip.getAttribute("data-slug");
+      const targetV = Number(chip.getAttribute("data-v"));
+      const feature = LEDGER_DATA.features.find(f => f.slug === slug);
+      const version = feature.versions.find(v => v.version === targetV);
+      const card = document.querySelector('.feature[data-slug="' + slug + '"]');
+      card.querySelectorAll(".v-chip").forEach(c => c.classList.toggle("active", Number(c.getAttribute("data-v")) === targetV));
+      const grid = card.querySelector(".step-grid");
+      if (grid) grid.outerHTML = renderStepGrid(feature, version);
+      card.querySelector(".status").textContent = feature.steps.filter(s => version.stepData[s] && version.stepData[s].attribution).length + " / " + feature.steps.length + " steps · v" + version.version;
+      wireInteractions();
+    });
+  });
+
+  document.querySelectorAll(".errors-toggle").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const slug = btn.getAttribute("data-slug");
+      document.getElementById("errors-" + slug).classList.toggle("expanded");
+    });
+  });
+}
+
+function applyFilters() {
+  const q = document.getElementById("search").value.trim().toLowerCase();
+  const showRemoved = document.getElementById("showRemoved").checked;
+  let visibleCount = 0;
+  document.querySelectorAll(".feature").forEach(card => {
+    const isRemoved = card.classList.contains("removed");
+    const matchesSearch = !q || card.getAttribute("data-search").includes(q);
+    const visible = matchesSearch && (showRemoved || !isRemoved);
+    card.style.display = visible ? "" : "none";
+    if (visible) visibleCount++;
+  });
+  document.querySelectorAll(".group-label").forEach(label => {
+    let el = label.nextElementSibling, anyVisible = false;
+    while (el && !el.classList.contains("group-label")) {
+      if (el.style.display !== "none") anyVisible = true;
+      el = el.nextElementSibling;
+    }
+    label.style.display = anyVisible ? "" : "none";
+  });
+  document.getElementById("emptyNote").style.display = visibleCount === 0 ? "" : "none";
+}
+
+document.getElementById("search").addEventListener("input", applyFilters);
+document.getElementById("showRemoved").addEventListener("change", applyFilters);
+
+renderDashboard(LEDGER_DATA);
+</script>
+</body>
+</html>

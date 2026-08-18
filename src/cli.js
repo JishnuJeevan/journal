@@ -1,11 +1,18 @@
 import { Command } from 'commander';
 import { init } from './commands/init.js';
+import { ledgerInit } from './commands/ledgerInit.js';
 import { listFeatures } from './commands/listFeatures.js';
+import { addFeature } from './commands/addFeature.js';
+import { setGroup } from './commands/setGroup.js';
+import { renameGroup } from './commands/renameGroup.js';
+import { removeFeature } from './commands/removeFeature.js';
 import { listSteps } from './commands/listSteps.js';
-import { draftLogic } from './commands/draftLogic.js';
+import { addStep } from './commands/addStep.js';
+import { draftStep } from './commands/draftStep.js';
 import { commitStep } from './commands/commitStep.js';
-import { newColumn } from './commands/newColumn.js';
+import { newVersion } from './commands/newVersion.js';
 import { logError } from './commands/logError.js';
+import { resolveError } from './commands/resolveError.js';
 import { buildDashboard } from './commands/buildDashboard.js';
 
 function collect(value, previous) {
@@ -36,9 +43,35 @@ export function buildProgram() {
     .action(run(init));
 
   program
+    .command('ledger-init')
+    .description('One-time bootstrap for an existing codebase: proposes features + pipelines from tracked files, snapshots Code with attribution "legacy"')
+    .action(run(ledgerInit));
+
+  program
     .command('list-features <brainDump>')
     .description('Propose a feature list from a free-form project description (AI-assisted, human confirms)')
     .action(run(listFeatures));
+
+  program
+    .command('add-feature <name> [description]')
+    .description('Register a single feature before any code is written for it')
+    .option('-g, --group <name>', 'group tag for this feature')
+    .action(run((name, description, opts) => addFeature(name, description, opts)));
+
+  program
+    .command('set-group <args...>')
+    .description('Assign or clear the group tag for one or more features: <feature...> [<group-name>] — omit the group name to clear')
+    .action(run((args) => setGroup(args)));
+
+  program
+    .command('rename-group <oldName> <newName>')
+    .description('Retag every feature currently tagged <oldName> to <newName>')
+    .action(run(renameGroup));
+
+  program
+    .command('remove-feature <feature>')
+    .description('Mark a feature removed (hidden by default in the dashboard) — does not delete its LEDGER history')
+    .action(run(removeFeature));
 
   program
     .command('list-steps <feature>')
@@ -47,40 +80,37 @@ export function buildProgram() {
     .action(run((feature, opts) => listSteps(feature, opts)));
 
   program
-    .command('draft-logic <feature> [brainDump]')
-    .description(
-      'AI drafts a starting point for the Logic step — review and edit before committing. ' +
-        'Pass a free-form brain dump to ground the draft in your own reasoning instead of AI improvisation.'
-    )
-    .action(run(draftLogic));
-
-  for (const step of ['logic', 'code', 'test', 'document']) {
-    program
-      .command(`commit-${step} <feature>`)
-      .description(`Record attribution, commit the ${step} step, and record its SHA into LEDGER/index.json`)
-      .option('-a, --attribution <value>', 'person | ai | person+ai')
-      .option('--add-path <path>', 'link an additional code path (commit-code only, repeatable)', collect, [])
-      .action(run((feature, opts) => commitStep(step, feature, opts)));
-  }
+    .command('add-step <feature> <stepName>')
+    .description('Register an additional step for a feature already underway (no content generated yet)')
+    .action(run(addStep));
 
   program
-    .command('commit <feature> <step>')
-    .description('Generic form of commit-<step>, for custom steps outside logic/code/test/document')
-    .option('-a, --attribution <value>', 'person | ai | person+ai')
+    .command('draft <step> <feature> [description]')
+    .description('AI drafts (or organizes your own notes into) content for a step — review and edit before committing')
+    .action(run((step, feature, description) => draftStep(step, feature, description)));
+
+  program
+    .command('commit <step> <feature>')
+    .description('Record attribution (auto-detected), commit the step, and record its SHA into LEDGER/index.json')
     .option('--add-path <path>', 'link an additional code path (step "code" only, repeatable)', collect, [])
-    .action(run((feature, step, opts) => commitStep(step, feature, opts)));
+    .action(run((step, feature, opts) => commitStep(step, feature, opts)));
 
   program
-    .command('new-column <feature>')
-    .description("Start a new revision pass for a feature — resets working files for its steps")
-    .action(run(newColumn));
+    .command('new-version <feature>')
+    .description('Start a new revision pass for a feature — resets working files for its steps')
+    .action(run(newVersion));
 
   program
-    .command('log-error <feature>')
-    .description('Append an entry to the feature\'s Errors log')
-    .option('-e, --error <text>', 'the error/output that occurred')
-    .option('-r, --resolution <text>', 'how it was resolved')
-    .action(run((feature, opts) => logError(feature, opts)));
+    .command('log-error <feature> [description]')
+    .description("Append an open entry to the feature's Errors log (pipe output in, or pass a description)")
+    .action(run(logError));
+
+  program
+    .command('resolve-error <feature> [fixNote]')
+    .description('Mark the most recent open error resolved (or a specific one via --id)')
+    .option('--id <n>', 'resolve a specific error entry by id')
+    .option('--agent', 'mark attribution as ai (invoked autonomously by an agent)')
+    .action(run((feature, fixNote, opts) => resolveError(feature, fixNote, opts)));
 
   program
     .command('build-dashboard')

@@ -5,9 +5,16 @@ you hit them, clean up later if needed.
 
 ## Shortcomings / friction
 
-- `commit-logic`/`commit-code`/`commit-test`/`commit-document` don't auto-run
-  `build-dashboard` afterward — have to remember to rebuild it separately every time.
-  (raised 2026-08-17)
+- ~~`commit-logic`/`commit-code`/`commit-test`/`commit-document` don't auto-run
+  `build-dashboard` afterward — have to remember to rebuild it separately every time.~~
+  **Done (2026-08-18).** `ledger commit <step> <feature>` now rebuilds `LEDGER/index.html`
+  automatically as the last step of every successful commit (before the optional post-commit
+  drift check, so it's never held up by an interactive prompt). (raised 2026-08-17)
+
+Everything else below predates the v2 spec rewrite (`docs/LEDGER-method-spec.md`), which
+superseded v1's design (columns → versions, unified `draft`/`commit`, real AI-authored code,
+etc.) and folded most of these items in directly. Left here as historical record, not an active
+punch list.
 
 ## Bugs
 

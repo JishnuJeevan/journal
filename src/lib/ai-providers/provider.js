@@ -15,7 +15,7 @@ export const DEFAULT_PROVIDER = 'claude-cli';
 export function loadConfig() {
   const file = configFile();
   if (!fs.existsSync(file)) {
-    return { aiProvider: DEFAULT_PROVIDER };
+    return { aiProvider: DEFAULT_PROVIDER, testCommand: null };
   }
   let parsed;
   try {
@@ -23,7 +23,7 @@ export function loadConfig() {
   } catch (err) {
     throw new Error(`Failed to parse ${file}: ${err.message}`);
   }
-  return { aiProvider: DEFAULT_PROVIDER, ...parsed };
+  return { aiProvider: DEFAULT_PROVIDER, testCommand: null, ...parsed };
 }
 
 export function saveConfig(config) {

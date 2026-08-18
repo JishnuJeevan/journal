@@ -1,6 +1,6 @@
-# The Ledger Method — Specification (v0.2 Draft)
+# The Ledger Method — Specification
 
-> **Status:** Draft for implementation. This document is meant to be handed to an AI coding assistant (e.g. Claude Code) to build a working v1 of the tool. Open questions are marked explicitly and should not be silently resolved by the implementer — flag them back to the author instead.
+> **Status:** Draft for implementation. This document is meant to be handed to an AI coding assistant (e.g. Claude Code) to build and evolve the tool. Open questions are marked explicitly and should not be silently resolved by the implementer — flag them back to the author instead. Items marked **(inferred)** are extensions applied by analogy to an already-confirmed pattern elsewhere in the spec, not something explicitly discussed for that specific case — flag these back to the author for confirmation too, don't just build them.
 
 ---
 
@@ -12,12 +12,14 @@ The Ledger Method is a development methodology (and accompanying tool) designed 
 
 1. **Engagement** — the person building the software must actively participate in each stage, not just approve AI output.
 2. **Understanding** — the person must understand the code and the logic behind it, not just see that it runs.
-3. **Provenance** — for every piece of work, there should be a record of who did it: a person, an AI, or a person and AI collaborating. This is where the name comes from — a ledger is fundamentally a record of accountability, and each commit under this method functions as a ledger entry.
+3. **Provenance** — a record of how each piece of work was produced (human-originated vs. AI-originated), detected automatically from tool usage rather than self-reported.
 4. **Friction against blind acceptance** — the workflow should discourage reflexively clicking "yes" to AI suggestions without engagement.
 
-This is explicitly **not** a tool for people who want to vibe-code faster. It is for people who want a structured way to stay engaged with AI-assisted development, and to have a durable record of how a piece of software actually came to be.
+This is explicitly **not** a tool for people who want to vibe-code faster, or who run many autonomous agents in parallel to ship quickly. It is for people who want a structured, incremental way to stay engaged with AI-assisted development, and to have a durable record of how a piece of software actually came to be.
 
-A core workflow principle that runs through this whole method: **features are defined before code is written**, not discovered after the fact. The one exception is onboarding an existing project onto the method (§8.1) — everywhere else, the feature-first order holds.
+A core workflow principle that runs through this whole method: **features are defined before code is written**, **Logic is defined before Code is written**, and **Logic is defined before Test is written** — each step downstream draws from what was decided upstream, never the reverse (except through the explicit drift-flagging mechanism in §6.5, which surfaces divergence rather than silently allowing it).
+
+**A key lesson from early dogfooding, worth stating explicitly:** the biggest barrier to understanding AI-generated code usually isn't *who* wrote it — it's a mismatch between the code's structure/style and how the person themselves thinks about the problem, and a lack of anything concrete to verify against once code exists. The fixes that emerged from this: let the person provide the *shape* of a solution (via Logic, refined iteratively — §4.1), have Code and Test both derive from that shape rather than inventing their own, and give the person a concrete way to check the result (annotations for unfamiliar code, §6.6; a verification checklist for things that can't be asserted in code, §4.3).
 
 ---
 
@@ -25,10 +27,13 @@ A core workflow principle that runs through this whole method: **features are de
 
 | Term | Meaning |
 |---|---|
-| **Feature** | A discrete unit of functionality in the project (a function, module, or user-facing capability). The whole project is decomposed into features. |
-| **Step** | A stage a feature passes through on its way to completion. Default steps: **Logic → Code → Test → Document**. The step set is customizable per feature (see §4.5). |
-| **Column** | One complete pass through the step pipeline for a feature. When a feature changes materially after initial completion (e.g. a team review requests a change), a **new column** is started — the same steps are redone, producing a new revision. Think of it like a new column in a spreadsheet: the feature is a row, and each column is a version of that row over time. |
-| **Attribution** | A tag recorded per step, per column, indicating who did that step: **person**, **ai**, **person+ai**, or **legacy** (see §8.1 for `legacy`). This is self-reported and honesty-based in v1 — there is no technical enforcement. |
+| **Feature** | A discrete unit of functionality in the project. The whole project is decomposed into features. |
+| **Step** | A stage a feature passes through: **Logic → Code → Test → Document** by default, customizable per feature (§4.5). |
+| **Version** | One complete pass through the step pipeline for a feature. A **new version** starts when a feature changes materially. In the dashboard, each version is displayed as a column, following the original spreadsheet-style design. |
+| **Attribution** | A tag recorded per step, per version, describing how that step's content was produced: **person**, **ai**, or **legacy**. Automatically detected from tool usage (§5) — not self-reported. |
+| **Brain dump** | Free-form input the user provides when drafting a step (raw notes, pseudocode). AI organizes/completes it rather than inventing content from nothing. For Logic, this is an iterative, persistent file (§4.1), not a one-shot input. |
+| **Test outline** | The Test step's analogue of a brain dump — a proposed (then user-editable) list of what should be verified for a feature, split into automatable and manual/visual items (§4.3). |
+| **Group** | An optional label attached to a feature purely for dashboard organization (e.g. `authentication`). Flat tagging, not structural nesting — features stay in `LEDGER/features/` with no parent/child hierarchy. Assignable by AI (proposed alongside features during `list-features`) or by the user (at `add-feature` time, or retroactively via `set-group`). |
 
 ---
 
@@ -36,200 +41,223 @@ A core workflow principle that runs through this whole method: **features are de
 
 ```
 project-root/
-├── src/                          (or wherever the actual project code normally lives)
+├── src/                          (actual project code)
+├── tests/                        (actual, runnable test files — e.g. pytest)
 ├── LEDGER/
 │   ├── index.html                 <- generated dashboard. NEVER hand-edited.
-│   ├── index.json                 <- generated/updated data source for the dashboard (see §7.1)
+│   ├── index.json                 <- data source for the dashboard (§8.1)
+│   ├── style.md                   <- global code style + testing preferences (§7)
 │   ├── features/
 │   │   └── feature-x/
 │   │       ├── logic/
-│   │       │   └── logic.md
+│   │       │   ├── brain-dump.md   <- persistent, append-only history of every round (§4.1)
+│   │       │   └── logic.md        <- AI-organized, current committed Logic
 │   │       ├── code/
-│   │       │   └── <snapshot of relevant code, synced at commit time — see §6.2>
+│   │       │   ├── sketch.md       <- (inferred) optional code-level sketch, same pattern as brain-dump.md
+│   │       │   ├── <code snapshot files>
+│   │       │   └── annotations.md  <- unfamiliar-term flags (§6.6)
 │   │       ├── test/
-│   │       │   └── test.md
-│   │       └── document/
-│   │           └── document.md
-│   └── Errors/
-│       └── feature-x/
-│           └── errors.md
+│   │       │   ├── test-outline.md <- AI-proposed, user-editable test plan (§4.3)
+│   │       │   └── test.md         <- snapshot of the real generated test file(s) + manual checklist
+│   │       ├── document/
+│   │       │   └── document.md
+│   │       └── errors/
+│   │           └── errors.md       <- flat, append-only error log for this feature (§4.6)
 ```
-
-Notes:
-- Each step's `.md` file (and the code snapshot) gets **overwritten** when a new column starts. Historical versions are **not** kept as separate files — they are recovered via git history, using the commit SHA recorded for that column (see §6).
-- Additional step folders can exist per feature if that feature's step set is customized (e.g. `feature-x/qa/`, `feature-x/verification/`).
 
 ---
 
 ## 4. The Four Steps
 
 ### 4.1 Logic
-- **What it is:** A high-level, human-understandable description of how the feature should work — the reasoning, not the implementation.
-- **Purpose:** This is the step where the human's own understanding is the actual product. Everything else in the pipeline exists to serve or record this understanding.
-- **AI's role:** AI may be used to *draft a starting point* (see `draft-logic` in §9) or to answer clarifying questions, but the expectation is that the human reviews and edits this content before considering it done. This is **not technically enforced in v1** — it relies on the attribution tag being filled honestly.
+
+- **What it is:** A high-level, human-understandable description of how the feature should work. This is the step where the human's own understanding is the actual product, and the primary input to both Code (§4.2) and Test (§4.3).
+- **Command:** `draft logic <feature> ["brain dump text"]` (i.e. `draft <step> <feature> ["description"]`, §11, with step=logic)
+
+**Iterative refinement mechanism:**
+- All brain-dump content — however it arrives — lands in a single file, `logic/brain-dump.md`, which is the persistent history for that feature's Logic. CLI-provided text is appended to this file as a new labeled section (e.g. `## Round 1`), not used ephemerally and discarded — this keeps CLI input and direct file edits equivalent, just two ways of adding to the same record.
+- **First call, no inline text:** rather than immediately falling back to full AI generation, `draft logic` creates an empty `brain-dump.md` and tells the user where it is, so even a first pass goes through a file rather than an awkward command-line string (useful especially when working from a phone). If the user chooses to leave it empty and re-run the command, AI generates Logic from the feature description alone (attribution `ai`, per §5).
+- **Refinement rounds:** the user adds feedback/suggestions as a new labeled section appended below the existing content in `brain-dump.md` (not interleaved into the original text — each round stays a distinct, separately readable block, since the raw original input is what the deferred diff-scoring feature (§12) will eventually want to compare against). Re-running `draft logic <feature>` (no text needed once the file exists) reads the full `brain-dump.md` history plus the current `logic.md` and produces an updated `logic.md`.
+- **Locking:** once `commit logic` runs, the discussion is closed for that version. Further changes require `new-version` — no special "edit after commit" path.
 
 ### 4.2 Code
-- **What it is:** The actual implementation of the feature.
-- **Location:** Lives in the normal project structure (e.g. `src/`), as usual. A **snapshot copy** is placed in `LEDGER/features/feature-x/code/` at commit time (see §6.2), so that the interaction between multiple functions in a feature is readable in one place without hunting through the repo.
-- **AI's role:** Normal AI-assisted coding is expected here.
+
+- **What it is:** The actual implementation, derived from the feature's committed Logic (the primary input — `draft code` reads it directly, and a well-written Logic naturally determines file structure, including multi-file splits, without a separate mechanism for that).
+- **Command:** `draft code <feature> ["sketch"]` (i.e. `draft <step> <feature>`, §11, with step=code and the optional argument used as a sketch)
+- **Optional sketch input:** the user may additionally provide a rough code-level sketch/pseudocode. **(Inferred, not yet explicitly confirmed):** by analogy with `brain-dump.md`, this likely should also persist to `code/sketch.md` rather than being used once and discarded, for the same future diff-scoring reasons — flagged in §12 for confirmation.
+- **Style:** consults `LEDGER/style.md` (§7) before generating.
+- **Annotations:** produces `code/annotations.md` flagging unfamiliar terms not present in the Logic (§6.6).
+- **Snapshot:** the real code lives in `src/`; an exact copy is synced to `LEDGER/features/feature-x/code/` at commit time (§6.2).
+- **Open/undecided:** whether to show a short outline of planned code structure before writing the full implementation (§12).
 
 ### 4.3 Test
-- **What it is:** Verification that the code does what the Logic step said it should do.
-- **AI's role:** AI can generate tests; the human is expected to run and verify results.
-- **Open question:** how integration tests / cross-feature test concerns are handled is deferred (see §11).
+
+- **What it is:** Verification that the code does what Logic said it should do — split explicitly into what can be checked by an automated assertion versus what needs a human to look and confirm.
+- **Command:** `draft test <feature>` (i.e. `draft <step> <feature>`, §11, with step=test), used in two phases:
+  1. **First run (no `test-outline.md` yet):** reads the feature's committed Logic, derives candidate things to verify, and proposes a split — **automatable** (testable via real assertions) vs. **manual/visual** (things like layout/appearance that can't become code assertions) — writing the result into `test/test-outline.md`.
+  2. **User reviews and edits `test-outline.md` directly** — adding/removing cases, reclassifying automatable vs. manual, and adding notes on how a specific test should be written.
+  3. **Re-running `draft test <feature>`** (outline now exists) generates the real content: actual test code for automatable items, written to a real, runnable file (e.g. `tests/test_feature.py`, following the testing framework named in `style.md` — §7), with a copy synced into `test/test.md`; and a checklist for manual/visual items, which exists only in `test/test.md` since there's no "real" file for something a human just looks at.
+- **`commit test` requirement:** does not complete until automated tests pass **and** every manual checklist item has been explicitly checked off — not a general "looks fine, commit."
+- **Re-editing the outline:** no limit — edit `test-outline.md` as many times as needed, rerun `draft test` to regenerate. **(Inferred, not yet explicitly confirmed):** whether edits to `test-outline.md` should follow the same round-labeled convention as `brain-dump.md` (§4.1), or just be freely re-edited without that structure — flagged in §12.
 
 ### 4.4 Document
 - **What it is:** Documentation of what the code does, written so others (including future-you) can understand it without re-deriving the logic.
 - **AI's role:** AI can draft this from the Logic and Code content already produced.
 
 ### 4.5 Customizable Step Sets
-The four steps above are the **default**, not a fixed requirement. Some features may need additional steps (QA, Verification, Security Review, etc.), and this will vary by feature and, eventually, by project type (see §11, generalization beyond coding).
+The four steps above are the default, not fixed. `list-steps` proposes an appropriate pipeline per feature (e.g. adding QA/Verification), which the human confirms.
 
-The `list-steps` command (see §9) is how this customization happens: given a feature description, AI proposes an appropriate step pipeline for that feature, which the human reviews and confirms before it's locked in as that feature's step set. This is a **structural/scaffolding decision**, not content generation — it decides *which* steps apply, not what goes inside them. It carries much lower risk than AI drafting the Logic content itself, and does not conflict with the anti-blind-acceptance philosophy in the same way.
+**Taxonomy for how a customized step should be supported**, decided once a step is actually added:
+1. **Checklist-from-Logic** — candidate checks derived from the feature's own Logic, split automatable/manual, each requiring explicit confirmation. This is Test's pattern (§4.3) and is likely directly reusable for QA/Verification-type steps without new engineering, since "verify the feature does what Logic says" is close to what those mean.
+2. **Checklist-from-template** — checks come from a fixed, standard list that applies regardless of the specific feature (e.g. Security: "no hardcoded secrets," "input is validated"), not derived from that feature's Logic. Not yet built for any step.
+3. **Freeform** — a plain `.md` file, no special tooling. The default for any step without a designed mechanism yet. Can graduate to pattern 1 or 2 later once real use reveals what it actually needs.
+
+**Quality is explicitly freeform for now (pattern 3).** "Quality" bundles several different concerns (maintainability/readability, consistency with style conventions, robustness against bad input) that likely don't share one mechanism — maintainability/consistency overlaps with what linters already do well; robustness likely splits the same automatable/manual way Test does. Rather than guess at a design before the author has actually done a quality pass, this is deliberately left as a blank, user-defined `.md` file until real usage clarifies what's needed.
+
+**Performance is template-seeded, not blank**, since unlike Quality it has a well-known standard structure (load, stress, response time/latency, resource usage) that doesn't depend on project-specific judgment to define. The seeded categories are a starting scaffold, not a schema — fully editable, and an expert can discard them entirely and write whatever's actually relevant (e.g. p95/p99 latency targets, connection pool limits).
+
+**Adding a step to a feature already underway:** `add-step <feature> <step-name>` — registers that a step applies to this feature (creates its folder, adds it to the pipeline) but generates no content itself. Distinct from `list-steps`, which proposes the whole pipeline typically at feature creation; `add-step` handles realizing mid-feature that something else is needed (e.g. Performance, Accessibility).
+
+To actually populate the step, use the unified `draft` command (see §11): `draft <step-name> <feature> ["description"]`.
+- **Description given:** same organize-not-invent pattern as Logic (§4.1) — saved to `steps/<step-name>/brain-dump.md`, AI organizes it into the actual step file, attribution `person`. This takes priority regardless of whether the step name matches a known template.
+- **No description, step name matches a known template** (Security, Performance — see above): seeded with that template.
+- **No description, no known template:** blank, freeform (Quality's treatment).
+
+This means there's no hard split between "steps we've designed for" and "everything else" — describing what you want is always enough to get a real starting point, whether or not the tool has ever seen that step name before.
+
+### 4.6 Errors Log
+
+Not one of the four/customizable steps — a separate, flat, append-only log per feature (`errors/errors.md`), for capturing runtime errors and how they were resolved. Unlike the steps above, it isn't tied to a version — an error can happen at any time, including well after every step has been committed.
+
+- **Logging an error:** `log-error <feature> ["description"]`. If output is piped in (e.g. `npm test | ledger log-error tic-tac-toe`), that becomes the entry automatically. Without piped input or a description, an empty entry opens for manual filling — same fallback pattern as Logic (§4.1). Creates a new, timestamped, **open** entry.
+- **Resolving it:** `resolve-error <feature> ["fix note"] [--id <n>] [--agent]` — appends the fix to the most recent open entry (or a specific one via `--id`) and marks it resolved. For longer explanations than the one-line note supports, the user can hand-edit `errors.md` directly afterward — `resolve-error` is meant for the quick note and the status flip together; anything added by hand afterward is purely additive to an already-resolved entry.
+- **Attribution — who fixed it:** detected from *how the command was invoked*, not self-reported, consistent with the rest of this method. An AI agent acting autonomously (e.g. fixing a bug on its own without the user typing the command) passes `--agent` when calling `resolve-error`; its absence means a human ran it directly, which is the default (`person`). This is the same "let the mechanism declare it, don't ask anyone to self-report" principle used for step attribution (§5) — just applied to *who invoked the command* rather than *what content was given*.
+- **AI does not use this automatically.** An AI agent (e.g. Claude Code) working on the project won't spontaneously start using `log-error`/`resolve-error` just because they exist — it only does so if explicitly instructed to as part of its working instructions for the project. Worth stating directly to any AI agent given autonomy over running/fixing a feature, if this record is wanted.
+- **Dashboard:** surfaced as its own cell per feature (§8) — clicking it expands the list of entries (open and resolved), each showing its fix note and attribution dot, same visual treatment as a step.
 
 ---
 
 ## 5. Attribution Model
 
-- Recorded **per step, per column**.
-- Values: `person`, `ai`, `person+ai`, `legacy` (see §8.1 — used only for steps backfilled from a pre-existing codebase, where no real authorship record exists).
-- Self-reported by the human; no detection or enforcement mechanism in v1 (may be added later if the method proves useful).
-- Stored in `LEDGER/index.json` (see §7.1), not in per-file front-matter — this was a deliberate choice to keep dashboard generation fast on larger projects (see §7.1 for the reasoning).
+Attribution is recorded per step, per version, and is **automatically detected from tool usage** — nothing is self-reported.
+
+- **`person`** — a brain dump (Logic) or sketch (Code) was provided/present when the draft command produced its result. For Logic specifically, this reflects the latest state of `brain-dump.md` at commit time, not a per-round score.
+- **`ai`** — no brain dump/sketch was present; AI generated the content from the feature/file description alone.
+- **`legacy`** — content originates from `ledger-init`'s bootstrap of a pre-existing codebase (§9.1).
+
+**Deferred (see §12):** degree-of-collaboration scoring via before/after diffs, and scoring based on the full `brain-dump.md` round history rather than just its latest state.
 
 ---
 
 ## 6. Git Integration
 
 ### 6.1 Commit-per-step
-"Commit" is not a separate fifth step — it is the closing action of *each* step. Each step has its own commit command (`commit-logic`, `commit-code`, `commit-test`, `commit-document`). Running it:
-1. Records the attribution tag for that step (if not already set).
-2. Performs a git commit of the relevant files — the step's `.md` file (and, for Code, the real project code in `src/`).
-3. Records the resulting commit SHA into `LEDGER/index.json` (see §7.1).
-
-This produces granular git history: one commit per step, per column, each traceable to who did it.
+Each step has its own commit command. Running it determines attribution (§5), performs a git commit, and records the SHA into `LEDGER/index.json` (§8.1).
 
 ### 6.2 Code snapshot sync
-As part of `commit-code`, the tool copies the relevant code for that feature into `LEDGER/features/feature-x/code/`, tagged with the same commit SHA. This snapshot is a **point-in-time copy**, not a live sync — it will not drift, because it's only ever written at commit time and overwritten by the next column's commit.
+`commit code` copies the relevant code into `LEDGER/features/feature-x/code/`, tagged with the commit SHA.
 
 ### 6.3 Historical access via SHA
-Because step files are overwritten each column, the dashboard needs the recorded SHA to show historical state. Old-column links in the dashboard resolve via `git show <sha>:<path>` rather than reading the live file.
+Old-version links in the dashboard resolve via `git show <sha>:<path>`, since step files are overwritten each version.
 
 ### 6.4 Commit writes must stay in sync with the index
-Every `commit-*` command performs two things that must not drift apart: the git commit itself, and the corresponding write to `LEDGER/index.json`. If one succeeds and the other fails, the dashboard will show inaccurate data. The implementer should make this as close to atomic as practical, and **fail loudly** (not silently) if the two can't both complete — a wrong dashboard is worse than a command that visibly errors out.
+Every `commit-*` command's git commit and its `LEDGER/index.json` write must not drift apart; fail loudly if both can't complete.
+
+### 6.5 Drift detection (Code and Test)
+
+Because Code and Test are meant to be primarily driven by upstream files (Logic, and the test outline), directly hand-editing the downstream file risks the upstream going silently stale. A single three-tier model applies to both:
+
+1. **Primary path:** update the upstream file (Logic for code; `test-outline.md` for tests) and rerun `draft code` / `draft test` — everything downstream regenerates properly.
+2. **Minor direct edit** (styling, formatting, a for-loop instead of a while-loop — no behavior change): detected by comparing the file against what was last generated. Flagged, non-blocking — the tool asks once, after the relevant commit completes, *"You edited this directly — what changed, in one sentence?"* Skippable; if skipped, logged as "possibly stale." The answer is appended as a short note to the corresponding upstream file (Logic for code edits; `test-outline.md` for test edits). A minor code edit does not need to flag Test, and vice versa, since by definition it didn't change behavior.
+3. **Major direct edit** (actually changes what the feature does): the recommended path is `new-version`, typically after real review/feedback — matching the original definition of what a version represents.
+
+This check is **post-commit**, not blocking — `commit code`/`commit test` complete normally first, and the check runs afterward.
+
+### 6.6 Code annotations (unfamiliar-term flagging)
+
+After generating code, `draft code` compares the generated code's terms (function calls, imports, notable syntax) against the feature's Logic text — anything present in the code but not implied by Logic gets flagged.
+
+- **v1 approach: purely textual** — does the term appear anywhere in the Logic text? A semantic/conceptual comparison is deferred (§12).
+- **Output:** `code/annotations.md`, one or two plain-language lines per flagged item.
+- **Passive, not interactive** — informational, nothing blocks on it.
 
 ---
 
-## 7. The Dashboard (`index.html`)
+## 7. Global Style & Testing Preferences
 
-- **Generated only** — via the `build-dashboard` command. Never hand-edited. This avoids the dashboard drifting from the underlying data, and avoids a person or AI editing HTML directly instead of the real content.
-- **Layout:** Features as rows (or row groups), the four (or customized) steps as sub-rows, and columns representing each revision pass. Each cell shows the attribution tag and links to that step's content — either the live file (current column) or a historical view via SHA (past columns).
-- **Errors surfacing:** deferred out of v1 (see §11) — the Errors log exists (§9) but is not shown in the dashboard yet.
+A single project-level file, `LEDGER/style.md`, holds:
+- **Code style preferences** — e.g. "prefer simple, explicit statements over clever one-liners."
+- **Testing preferences** — e.g. "Python tests: use pytest." Only needs to cover the kinds of code actually being automated-tested; features whose testing is entirely manual/visual (e.g. UI appearance) don't require any testing-library preference at all, since those items become checklist entries, not code (§4.3).
 
-### 7.1 Data source: `LEDGER/index.json`
-`build-dashboard` reads from a single JSON index file rather than scanning every `.md` file's front-matter. This was chosen specifically for build performance on larger projects — scanning many files on every dashboard rebuild would get slower as the project grows, while reading one JSON file stays fast regardless of project size.
-
-This makes `LEDGER/index.json` the authoritative data source for the dashboard. Every `commit-*` command must write to it as part of that same command (see §6.4) — it is not a separate bookkeeping step the user has to remember to run.
+Both `draft code` and `draft test` read this file every time they run. Set once, early; editable any time, applying to all future calls. A one-off override for a single call is reasonable as a flag rather than changing the global file.
 
 ---
 
-## 8. Bootstrapping onto an Existing Project
+## 8. The Dashboard (`index.html`)
 
-### 8.1 `ledger-init` — one-time onboarding
-For projects that already have code before adopting the Ledger Method, `ledger-init` is a **one-time bootstrap command**, conceptually similar to `git init` or Claude Code's `/init` — something run once at the start of using the tool on that project, not part of the ongoing workflow.
+- **Generated only**, via `build-dashboard`. Never hand-edited.
+- **Layout:** Features as rows, steps as sub-rows, each version displayed as a column (following the original spreadsheet-style design). Features sharing a group tag (§2) cluster together in the display; ungrouped features appear individually. Each cell shows attribution and links to content.
+- **Removed features:** hidden by default (a toggle reveals them) — the dashboard's default view shows only active features, keeping it uncluttered, while removed features (§9.3) remain fully present in the underlying data for anyone who wants to look.
+- **Not yet surfaced in the dashboard (deferred, §12):** whether a feature's manual test checklist is fully checked off. The Errors log is now surfaced (§4.6) — a per-feature cell showing open/resolved entries with attribution.
 
-What it does:
-1. Scans the existing project.
-2. Proposes a list of features it finds, and a step pipeline per feature (same underlying mechanism as `list-features` + `list-steps`).
-3. The user reviews the proposed list — adds or removes features based on their own understanding of the project — before anything is finalized.
-4. For each confirmed feature:
-   - **Code step:** populated immediately with a snapshot of the existing code (the code already exists — no reason to leave this blank).
-   - **Logic, Test, Document steps:** left blank/unfilled, since no real record of the original reasoning, testing, or documentation process exists.
-   - **Attribution:** set to `legacy` for all steps (see §5) rather than `person`/`ai`/`person+ai`, since none of those honestly describe how the code was actually produced.
-5. Does **not** re-implement or modify any existing code — this is scaffolding only, applied retroactively.
-
-The user then fills in Logic/Test/Document for these features over time, same as any other feature, using the normal commands (§9).
-
-**Re-running `ledger-init`:** should be safe — if run again (accidentally, or to catch code the method hasn't picked up yet), it must not overwrite or duplicate features that already have real (non-`legacy`) LEDGER entries. It should only create entries for features it doesn't already have a record of. This is a defensive fallback, not the intended way to add new features going forward (see §8.2).
-
-### 8.2 Ongoing feature creation stays feature-first
-After the one-time bootstrap (or from day one, on a brand-new project), new features are always defined **before** their code is written:
-- `list-features` — bulk brain-dump at the start of a project (or a new phase of work), producing an initial feature list.
-- `add-feature` — lightweight, one-at-a-time version for adding a single new feature as it comes up later in the project's life. Same feature-first principle: the user describes the feature, it goes through Logic before any Code step is committed.
-
-`ledger-init` is intentionally **not** the mechanism for adding features over time — doing so would mean writing code first and letting the tool catch up, which runs against the method's core principle (§1).
+### 8.1 Data source: `LEDGER/index.json`
+`build-dashboard` reads from a single JSON index file for build performance. Every `commit-*` command writes to it as part of that same command (§6.4).
 
 ---
 
-## 9. CLI Commands (draft list)
+## 9. Bootstrapping onto an Existing Project
 
-| Command | Purpose |
-|---|---|
-| `ledger-init` | **One-time** bootstrap for an existing project. Scans code, proposes features + step pipelines, populates Code snapshots, leaves Logic/Test/Document blank with `legacy` attribution. Safe to re-run without clobbering real entries (see §8.1). |
-| `list-features` | Takes a free-form project description (brain dump) and proposes a list of features. Used at the start of a project or a new phase of work. |
-| `add-feature` | Adds a single new feature, described by the user, before any code is written for it. The ongoing (non-bootstrap) way features get added over time. |
-| `list-steps <feature>` | Proposes a step pipeline for a given feature (default: Logic/Code/Test/Document, may suggest additions like QA/Verification). Human reviews and confirms before it's locked in. |
-| `draft-logic <feature> ["<brain dump>"]` | AI drafts a starting point for the Logic step. Bare form improvises from the feature's name + description; with a brain dump, AI instead organizes the human's own raw reasoning into a coherent draft rather than inventing it. Explicitly framed as a draft either way — human is expected to edit before committing. |
-| `commit-logic <feature>` | Records attribution + commits the Logic file + writes to `LEDGER/index.json` (see §6.4). |
-| `commit-code <feature>` | Records attribution + commits real project code + syncs snapshot into LEDGER + writes to `LEDGER/index.json`. |
-| `commit-test <feature>` | Records attribution + commits the Test file + writes to `LEDGER/index.json`. |
-| `commit-document <feature>` | Records attribution + commits the Document file + writes to `LEDGER/index.json`. |
-| `new-column <feature>` | Starts a new revision pass for a feature — opens fresh working files for its steps (previous content remains accessible via git history + recorded SHAs). |
-| `log-error <feature>` | Appends an entry to that feature's Errors log. |
-| `build-dashboard` | Regenerates `index.html` from `LEDGER/index.json`. |
+### 9.1 `ledger-init` — one-time onboarding
+A one-time bootstrap for pre-existing projects: scans the codebase, proposes a feature list + step pipeline per feature (user reviews/adjusts), populates Code snapshots immediately, leaves Logic/Test/Document blank with attribution `legacy`. Safe to re-run without overwriting real (non-`legacy`) entries.
 
-This list is a starting point — the implementer should treat command names and exact behavior as adjustable during build.
+### 9.2 Ongoing feature creation stays feature-first
+`list-features` (bulk, at the start) or `add-feature` (one at a time, later) — never `ledger-init` re-runs — is how new features get added going forward. `list-features` proposes features atomic by default (e.g. a "Login," "Signup," "Password Reset," and "Session Management" split rather than one large "Authentication" feature) — a focused Logic is easier to write well than one covering several concerns at once. The review step doubles as where the user merges an over-split proposal back together, or asks for finer breakdown.
+
+### 9.3 Removing a feature
+Removal is intentionally split into two separate actions, not one command:
+1. **The user deletes the feature's real code from `src/` themselves**, as a normal part of working in the codebase. The tool doesn't attempt to automatically identify and strip a feature's code from the rest of the project — too risky to safely automate.
+2. **The user then runs `remove-feature <feature>`** to update LEDGER accordingly.
+
+`remove-feature` marks the feature `removed` in `index.json` — it does **not** delete the LEDGER folder or its files. This matches the method's own premise: a ledger records a reversal, it doesn't erase the original entry. The dashboard (§8) hides removed features by default so the active view stays uncluttered, with a toggle to reveal them — so the record of what a removed feature was, and its full history, stays available without anyone needing to dig through git.
 
 ---
 
 ## 10. AI Backend Architecture
 
-The tool's AI-powered commands (`list-features`, `list-steps`, `draft-logic`, `ledger-init`'s scanning, etc.) should not call any single AI provider's SDK/API directly. Instead, they should call a single internal interface, e.g.:
-
-```
-AIProvider.generate(prompt, { structured?: boolean }) → text or parsed JSON
-```
-
-Each actual provider (Claude, OpenAI, Gemini, etc.) is implemented as a small adapter behind this interface. This keeps provider-specific details (CLI flags, auth, output parsing, billing model) isolated from the commands themselves, since providers' CLIs, billing rules, and availability change over time (this has already happened once during this project's own build — see the Claude billing discussion this spec's author had with their assistant).
-
-**v1 scope:**
-- Only the Claude adapter is implemented, using `claude -p` (headless mode) via the user's existing Claude Code subscription — **not** a standalone `ANTHROPIC_API_KEY`, to avoid separate pay-per-token billing on top of the subscription.
-- Provider choice is a **single global setting** for the whole project (e.g. in a config file), not configurable per command/step.
-
-**Deferred to a later version (see §11):** per-step provider configuration (e.g. Claude for `draft-logic`, a different provider for another step), and adapters for other providers (OpenAI/Codex, Gemini, etc.).
+AI-powered commands call a single internal interface (`AIProvider.generate(prompt, options)`), not any provider's SDK directly. v1: a Claude adapter only, using `claude -p` (headless mode) via the user's existing Claude Code subscription, not a standalone API key. Provider choice is a single global project setting. Per-step provider configuration and additional provider adapters are deferred (§12).
 
 ---
 
-## 11. Open Questions / Deferred Scope
+## 11. CLI Commands (draft list)
 
-These are intentionally **not** resolved in this document. Do not resolve them unilaterally during implementation — flag them back to the author.
-
-- Whether the Errors log surfaces in the dashboard.
-- How integration tests / cross-feature concerns are represented (deferred until author gets feedback from colleagues on the base idea).
-- Generalization of the method beyond coding (research, data science, project management) — the `list-steps` mechanism (§4.5) is the intended lever for this, but the actual non-coding step templates are not yet defined.
-- Whether/how to eventually add technical enforcement of the attribution model (currently fully honesty-based).
-- Per-step AI provider configuration, and adapters for providers beyond Claude (§10).
+| Command | Purpose |
+|---|---|
+| `ledger-init` | One-time bootstrap for an existing project (§9.1). |
+| `list-features` | Bulk brain-dump → proposed feature list, atomic by default (§2), with a suggested group tag per feature (§2); human reviews/adjusts both. |
+| `add-feature <name> ["description"] [--group <group-name>]` | Adds a single new feature before any code is written for it. Group tag optional. |
+| `set-group <feature> [<feature> ...] [<group-name>]` | Assigns or changes the group tag for one or more features in one call. Omitting `<group-name>` clears the tag (ungroups) for all listed features. |
+| `rename-group <old-group-name> <new-group-name>` | Retags every feature currently tagged `<old-group-name>` to `<new-group-name>`, in one operation. |
+| `remove-feature <feature>` | Marks a feature `removed` in `index.json` after its real code has been manually deleted from `src/` by the user first. LEDGER folder and files are kept, not deleted — preserves the record. |
+| `list-steps <feature>` | Proposes a step pipeline for a feature; human confirms. |
+| `add-step <feature> <step-name>` | Registers a step for a feature already underway (folder + pipeline entry only, no content — see §4.5). |
+| `draft <step> <feature> ["description"]` | Unified content-generation command for any step, default or custom. Behavior is step-specific under the hood: Logic (§4.1) manages iterative `brain-dump.md` refinement; Code (§4.2) reads committed Logic (+ optional sketch), consults `style.md`, produces `annotations.md`; Test (§4.3) runs its two-phase outline-then-generate flow; any other step follows the description/template/blank logic in §4.5. |
+| `commit <step> <feature>` | Unified commit command for any step. Records attribution + SHA + index entry (§6.1). Step-specific behavior preserved: `commit test` requires passing automated tests + fully checked-off checklist (§4.3); `commit code` and `commit test` both trigger the post-commit drift check (§6.5). |
+| `new-version <feature>` | Starts a new version (revision pass) for a feature. |
+| `log-error <feature> ["description"]` | Logs a new, open error entry for a feature (§4.6). Piped input is captured automatically; otherwise uses the description or opens an empty entry. |
+| `resolve-error <feature> ["fix note"] [--id <n>] [--agent]` | Appends a fix to the most recent open error entry (or a specific one via `--id`), marking it resolved. `--agent` marks attribution as `ai` (AI-agent-invoked); its absence means `person`. |
+| `build-dashboard` | Regenerates `index.html` from `LEDGER/index.json`. |
 
 ---
 
-## 12. Appendix — Example Walkthrough
+## 12. Open Questions / Deferred Scope
 
-### A. New project
-1. Author runs `list-features` with a brain-dump description of a new project → gets back a list of proposed features, including `user-authentication`.
-2. Author runs `list-steps user-authentication` → AI proposes Logic → Code → Test → Document (no QA/Verification needed for this one). Author confirms.
-3. Author runs `draft-logic user-authentication` → AI drafts a starting explanation of the auth flow. Author edits it into their own words/understanding.
-4. Author runs `commit-logic user-authentication` → attribution tagged `person`, file committed, SHA + entry recorded in `LEDGER/index.json`.
-5. Author (with AI assistance) writes the actual code in `src/`. Runs `commit-code user-authentication` → attribution tagged `person+ai`, code committed to `src/`, snapshot synced to `LEDGER/features/user-authentication/code/`, index updated.
-6. Tests written and run. `commit-test user-authentication` → attribution recorded, committed, index updated.
-7. Documentation drafted (AI-assisted) and reviewed. `commit-document user-authentication` → attribution recorded, committed, index updated.
-8. Author runs `build-dashboard` → `index.html` regenerated, showing `user-authentication` with all four steps, their attribution tags, and links to each committed file.
-9. Two weeks later, the team requests a change to the auth flow. Author runs `new-column user-authentication` → fresh working files opened for the four steps, previous column's content still viewable in the dashboard via its recorded SHAs.
-10. Meanwhile, a new feature idea comes up. Author runs `add-feature` to describe it, before writing any code for it — same feature-first flow as step 1 onward.
-
-### B. Existing project, adopting Ledger for the first time
-1. Author runs `ledger-init` in an existing repo that has no LEDGER folder yet.
-2. Tool scans the codebase, proposes a feature list (e.g. `user-authentication`, `payment-processing`, `email-notifications`).
-3. Author reviews the list — removes one that's actually dead code, adds one the scan missed.
-4. For each confirmed feature, LEDGER entries are created: Code step populated with a snapshot of existing code, Logic/Test/Document left blank, all attribution set to `legacy`.
-5. Author runs `build-dashboard` → dashboard shows all features with `legacy` markers and blank steps, making visible exactly what hasn't been documented/understood yet.
-6. Over time, author works through each feature's blank steps using the normal commands (`draft-logic`, `commit-logic`, etc.), gradually replacing `legacy` entries with real ones.
-7. Any brand-new feature from this point on goes through `add-feature`, not another `ledger-init` run.
+- Whether a feature's manual test checklist completion status surfaces in the dashboard.
+- How integration tests / cross-feature concerns are represented.
+- Generalization of the method beyond coding (research, data science, project management).
+- Degree-of-collaboration attribution scoring via before/after diffs, and scoring based on full `brain-dump.md` round history rather than just its latest state — both deferred until there's a clearer need/use case.
+- Per-step AI provider configuration, and adapters for providers beyond Claude.
+- Whether `draft code` should show a short outline/preview of planned code structure before writing full implementation.
+- **(Inferred, needs confirmation)** Whether `code/sketch.md` should persist sketches the same way `brain-dump.md` persists Logic input — applied here by analogy, not explicitly discussed for Code.
+- **(Inferred, needs confirmation)** Whether edits to `test-outline.md` should follow the same round-labeled convention as `brain-dump.md`, or just be freely re-edited.
+- Upgrading annotation matching (§6.6) from textual to semantic/conceptual.
+- Additional comprehension-verification mechanisms discussed but not committed: trusted/standard vs. core-logic marking with a different comprehension bar; tracking concepts the user has demonstrated understanding of over time; AI-generated comprehension questions after a step is drafted. Deliberately not built yet — the author wants to first test whether the Logic-first flow, code annotations, and the test checklist together resolve the comprehension gap before adding more machinery.

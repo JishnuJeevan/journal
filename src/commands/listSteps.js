@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import prompts from 'prompts';
 import { findProjectRoot, stepDir, stepFile, indexFile } from '../lib/paths.js';
-import { loadIndex, saveIndex } from '../lib/index-store.js';
+import { loadIndex, saveIndex, newFeatureEntry } from '../lib/index-store.js';
 import { stageAndCommit } from '../lib/git.js';
 import { proposeSteps } from '../lib/ai.js';
 import { writeStepFile } from '../lib/frontmatter.js';
@@ -19,21 +19,14 @@ export async function listSteps(feature, opts = {}) {
           `or create it inline with \`ledger list-steps ${feature} --description "..."\`.`
       );
     }
-    entry = {
-      name: feature,
-      description: opts.description,
-      steps: null,
-      codePaths: [],
-      currentColumn: null,
-      columns: [],
-    };
+    entry = newFeatureEntry({ name: feature, description: opts.description });
     index.features[feature] = entry;
   }
 
   if (entry.steps) {
     throw new Error(
       `Feature "${feature}" already has a locked step pipeline: [${entry.steps.join(', ')}]. ` +
-        `Step pipelines are immutable in v1 once locked.`
+        `Step pipelines are immutable in v1 once locked — use \`ledger add-step\` to add one.`
     );
   }
 
@@ -75,8 +68,8 @@ export async function listSteps(feature, opts = {}) {
   }
 
   entry.steps = finalSteps;
-  entry.currentColumn = 1;
-  entry.columns = [{ column: 1, steps: {} }];
+  entry.currentVersion = 1;
+  entry.versions = [{ version: 1, steps: {} }];
 
   const root = findProjectRoot();
   const relPaths = [path.relative(root, indexFile())];
@@ -84,10 +77,14 @@ export async function listSteps(feature, opts = {}) {
   for (const step of finalSteps) {
     const dir = stepDir(feature, step);
     fs.mkdirSync(dir, { recursive: true });
-    const file = stepFile(feature, step);
-    const fm = newStepFrontmatter({ feature, step, column: 1 });
-    writeStepFile(file, fm, defaultBodyForStep(step));
-    relPaths.push(path.relative(root, file));
+    // "code" and "test" manage their own file set (sketch.md/snapshot/annotations.md,
+    // test-outline.md/test.md) rather than a single <step>.md stub.
+    if (step !== 'code' && step !== 'test') {
+      const file = stepFile(feature, step);
+      const fm = newStepFrontmatter({ feature, step, version: 1 });
+      writeStepFile(file, fm, defaultBodyForStep(step));
+      relPaths.push(path.relative(root, file));
+    }
   }
 
   saveIndex(index);
@@ -98,5 +95,5 @@ export async function listSteps(feature, opts = {}) {
   );
 
   console.log(`\nLocked in. Committed ${sha.slice(0, 12)}.`);
-  console.log(`Next: ledger draft-logic ${feature}  (or edit LEDGER/features/${feature}/logic/logic.md directly)`);
+  console.log(`Next: ledger draft ${finalSteps[0]} ${feature}`);
 }

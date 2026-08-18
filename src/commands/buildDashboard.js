@@ -1,36 +1,29 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { findProjectRoot, dashboardFile, stepFile, ledgerRoot } from '../lib/paths.js';
+import { fileURLToPath } from 'node:url';
+import { dashboardFile, ledgerRoot, stepFile, stepDir, testFile } from '../lib/paths.js';
 import { loadIndex } from '../lib/index-store.js';
-import { show } from '../lib/git.js';
-import { generateDashboardHtml } from '../lib/dashboard.js';
+import { buildDashboardData } from '../lib/dashboard.js';
+
+const TEMPLATE_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'lib', 'dashboard-template.html');
 
 export async function buildDashboard() {
-  const root = findProjectRoot();
   const ledger = ledgerRoot();
   const index = loadIndex();
 
-  // Path relative to LEDGER/index.html, for clickable links to the live file.
-  const linkPath = (feature, step) => path.relative(ledger, stepFile(feature, step));
-  // Path relative to the repo root, matching what was staged in git commits — needed for `git show`.
-  const gitPath = (feature, step) => path.relative(root, stepFile(feature, step));
-
-  const showHistorical = (sha, relPath) => {
-    try {
-      return show(sha, relPath);
-    } catch {
-      return null;
-    }
+  const relFromLedger = (slug, step) => {
+    let abs;
+    if (step === 'code') abs = stepDir(slug, 'code');
+    else if (step === 'test') abs = testFile(slug);
+    else abs = stepFile(slug, step);
+    return path.relative(ledger, abs);
   };
 
-  const html = generateDashboardHtml(index, {
-    linkPath,
-    gitPath,
-    showHistorical,
-    generatedAt: new Date().toISOString(),
-  });
+  const data = buildDashboardData(index, { relFromLedger, generatedAt: new Date().toISOString() });
 
-  const file = dashboardFile();
-  fs.writeFileSync(file, html, 'utf8');
-  console.log(`Dashboard regenerated at ${file}`);
+  const template = fs.readFileSync(TEMPLATE_PATH, 'utf8');
+  const html = template.replace('/*__LEDGER_DATA__*/', () => JSON.stringify(data));
+
+  fs.writeFileSync(dashboardFile(), html, 'utf8');
+  console.log(`Dashboard regenerated at ${dashboardFile()}`);
 }

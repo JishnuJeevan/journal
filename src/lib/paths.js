@@ -30,12 +30,39 @@ export function stepDir(feature, step) {
   return path.join(featureDir(feature), step);
 }
 
+// Single-file steps (logic, document, any custom step) — code and test manage
+// their own file set instead of one <step>.md (see stepDir tree in the spec).
 export function stepFile(feature, step) {
   return path.join(stepDir(feature, step), `${step}.md`);
 }
 
+// Generic brain-dump file, reused by logic, document, and any custom step.
+export function brainDumpFile(feature, step) {
+  return path.join(stepDir(feature, step), 'brain-dump.md');
+}
+
+export function sketchFile(feature) {
+  return path.join(stepDir(feature, 'code'), 'sketch.md');
+}
+
+export function codeAnnotationsFile(feature) {
+  return path.join(stepDir(feature, 'code'), 'annotations.md');
+}
+
+export function testOutlineFile(feature) {
+  return path.join(stepDir(feature, 'test'), 'test-outline.md');
+}
+
+export function testFile(feature) {
+  return path.join(stepDir(feature, 'test'), 'test.md');
+}
+
 export function errorsFile(feature) {
-  return path.join(ledgerRoot(), 'Errors', feature, 'errors.md');
+  return path.join(featureDir(feature), 'errors', 'errors.md');
+}
+
+export function styleFile() {
+  return path.join(ledgerRoot(), 'style.md');
 }
 
 export function indexFile() {

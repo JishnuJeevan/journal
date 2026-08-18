@@ -4,7 +4,7 @@ import { indexFile } from './paths.js';
 
 export function createEmptyIndex() {
   return {
-    version: 1,
+    version: 2,
     features: {},
   };
 }
@@ -38,18 +38,37 @@ export function getFeature(index, feature) {
   const entry = index.features[feature];
   if (!entry) {
     throw new Error(
-      `Unknown feature "${feature}". Run \`ledger list-features\` or \`ledger list-steps ${feature} --description "..."\` first.`
+      `Unknown feature "${feature}". Run \`ledger list-features\` or \`ledger add-feature ${feature} "..."\` first.`
     );
   }
   return entry;
 }
 
-export function getCurrentColumn(featureEntry) {
-  const col = featureEntry.columns.find((c) => c.column === featureEntry.currentColumn);
-  if (!col) {
+export function newFeatureEntry({ name, description, group = null }) {
+  return {
+    name,
+    description,
+    group,
+    removed: false,
+    codePaths: [],
+    steps: null,
+    currentVersion: null,
+    versions: [],
+    errors: [],
+  };
+}
+
+export function getCurrentVersion(featureEntry) {
+  const v = featureEntry.versions.find((v) => v.version === featureEntry.currentVersion);
+  if (!v) {
     throw new Error(
-      `Corrupt index: no column ${featureEntry.currentColumn} recorded for this feature.`
+      `Corrupt index: no version ${featureEntry.currentVersion} recorded for this feature.`
     );
   }
-  return col;
+  return v;
+}
+
+export function nextErrorId(featureEntry) {
+  const ids = (featureEntry.errors || []).map((e) => e.id);
+  return ids.length ? Math.max(...ids) + 1 : 1;
 }
