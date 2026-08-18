@@ -47,6 +47,7 @@ project-root/
 │   ├── index.html                 <- generated dashboard. NEVER hand-edited.
 │   ├── index.json                 <- data source for the dashboard (§8.1)
 │   ├── style.md                   <- global code style + testing preferences (§7)
+│   ├── architecture.md            <- project-wide system shape, read by draft logic (§7)
 │   ├── features/
 │   │   └── feature-x/
 │   │       ├── logic/
@@ -71,14 +72,14 @@ project-root/
 
 ### 4.1 Logic
 
-- **What it is:** A high-level, human-understandable description of how the feature should work. This is the step where the human's own understanding is the actual product, and the primary input to both Code (§4.2) and Test (§4.3).
+- **What it is:** A high-level, human-understandable description of how the feature should work. This is the step where the human's own understanding is the actual product, and the primary input to both Code (§4.2) and Test (§4.3). `draft logic` also reads `LEDGER/architecture.md` (§7) as background context, so the feature's reasoning stays consistent with the overall system shape without restating it.
 - **Command:** `draft logic <feature> ["brain dump text"]` (i.e. `draft <step> <feature> ["description"]`, §11, with step=logic)
 
 **Iterative refinement mechanism:**
 - All brain-dump content — however it arrives — lands in a single file, `logic/brain-dump.md`, which is the persistent history for that feature's Logic. CLI-provided text is appended to this file as a new labeled section (e.g. `## Round 1`), not used ephemerally and discarded — this keeps CLI input and direct file edits equivalent, just two ways of adding to the same record.
 - **First call, no inline text:** rather than immediately falling back to full AI generation, `draft logic` creates an empty `brain-dump.md` and tells the user where it is, so even a first pass goes through a file rather than an awkward command-line string (useful especially when working from a phone). If the user chooses to leave it empty and re-run the command, AI generates Logic from the feature description alone (attribution `ai`, per §5).
 - **Refinement rounds:** the user adds feedback/suggestions as a new labeled section appended below the existing content in `brain-dump.md` (not interleaved into the original text — each round stays a distinct, separately readable block, since the raw original input is what the deferred diff-scoring feature (§12) will eventually want to compare against). Re-running `draft logic <feature>` (no text needed once the file exists) reads the full `brain-dump.md` history plus the current `logic.md` and produces an updated `logic.md`.
-- **Locking:** once `commit logic` runs, the discussion is closed for that version. Further changes require `new-version` — no special "edit after commit" path.
+- **Locking:** once `commit logic` runs, the discussion is closed for that version. Further changes require `new-version` — no special "edit after commit" path. This is now actively detected, not just a stated norm — see §6.5.
 
 ### 4.2 Code
 
@@ -163,7 +164,7 @@ Old-version links in the dashboard resolve via `git show <sha>:<path>`, since st
 ### 6.4 Commit writes must stay in sync with the index
 Every `commit-*` command's git commit and its `LEDGER/index.json` write must not drift apart; fail loudly if both can't complete.
 
-### 6.5 Drift detection (Code and Test)
+### 6.5 Drift detection (Code and Test, plus Logic integrity)
 
 Because Code and Test are meant to be primarily driven by upstream files (Logic, and the test outline), directly hand-editing the downstream file risks the upstream going silently stale. A single three-tier model applies to both:
 
@@ -172,6 +173,8 @@ Because Code and Test are meant to be primarily driven by upstream files (Logic,
 3. **Major direct edit** (actually changes what the feature does): the recommended path is `new-version`, typically after real review/feedback — matching the original definition of what a version represents.
 
 This check is **post-commit**, not blocking — `commit code`/`commit test` complete normally first, and the check runs afterward.
+
+**Logic itself needs the equivalent protection, but Logic has no upstream to append a note to** — it *is* the upstream. Once `commit logic` has run, `logic.md` is meant to be locked (§4.1) until `new-version`. This is currently only a stated norm, not detected — a real gap, since Logic is the most important file in the method and currently has weaker protection than the files that derive from it. The fix: the same before/after comparison used for Code and Test applies here too — any `draft`/`commit` command touching that feature checks whether `logic.md` still matches what was last committed. If it was hand-edited outside `draft logic` + `commit logic` since the last commit, flag it immediately (not appended anywhere, since there's nowhere upstream to append to) and point directly at `new-version` — there's no "minor edit, one-line note" tier for Logic the way there is for Code/Test, since a real Logic change already meets the definition of what a version is (§2). **Non-blocking**, same as Code and Test — the flag warns and recommends `new-version`, but doesn't refuse to run further commands on that feature; the tool never auto-starts a new version on its own, that decision stays with the user.
 
 ### 6.6 Code annotations (unfamiliar-term flagging)
 
@@ -183,13 +186,17 @@ After generating code, `draft code` compares the generated code's terms (functio
 
 ---
 
-## 7. Global Style & Testing Preferences
+## 7. Global Style, Testing, and Architecture
 
 A single project-level file, `LEDGER/style.md`, holds:
 - **Code style preferences** — e.g. "prefer simple, explicit statements over clever one-liners."
 - **Testing preferences** — e.g. "Python tests: use pytest." Only needs to cover the kinds of code actually being automated-tested; features whose testing is entirely manual/visual (e.g. UI appearance) don't require any testing-library preference at all, since those items become checklist entries, not code (§4.3).
 
 Both `draft code` and `draft test` read this file every time they run. Set once, early; editable any time, applying to all future calls. A one-off override for a single call is reasonable as a flag rather than changing the global file.
+
+**Architecture** gets its own sibling file, `LEDGER/architecture.md`, rather than living inside style.md or any single feature's Logic. Architecture — the overall system shape, major components, how they relate, key structural decisions — is a project-wide concern like style, not a feature-wide one like Logic; putting it inside one feature's Logic creates an ownership problem (which feature's Logic gets to describe the whole system?), and duplicating it across every feature's Logic is worse. `draft logic` reads `architecture.md` as background context so an individual feature's Logic stays consistent with the bigger picture without restating it. Freeform with a light scaffold (component list, data flow, key decisions) — a starting point, not a schema, same treatment as Performance's template-seeding (§4.5).
+
+This is a lightweight answer to the cross-feature/module-interaction question raised early on and deliberately deferred — not the full thing (no formal dependency modeling between features, no drift detection between stated architecture and actual implementation), just giving that reasoning an honest place to live rather than nowhere. The fuller version stays open (§12).
 
 ---
 
@@ -252,7 +259,9 @@ AI-powered commands call a single internal interface (`AIProvider.generate(promp
 ## 12. Open Questions / Deferred Scope
 
 - Whether a feature's manual test checklist completion status surfaces in the dashboard.
+- Formal cross-feature dependency modeling and drift detection between `architecture.md` and actual implementation — `architecture.md` (§7) now gives this reasoning a home, but doesn't model dependencies or detect drift.
 - How integration tests / cross-feature concerns are represented.
+- Team collaboration — concurrent edits to `index.json`, per-person (not just person/ai) attribution, shared understanding across multiple contributors, and whether `index.html` should be `.gitignore`d as a generated artifact (currently committed as-is; revisit alongside this). Deliberately unaddressed until real multi-person use surfaces what actually breaks (raised, not yet designed).
 - Generalization of the method beyond coding (research, data science, project management).
 - Degree-of-collaboration attribution scoring via before/after diffs, and scoring based on full `brain-dump.md` round history rather than just its latest state — both deferred until there's a clearer need/use case.
 - Per-step AI provider configuration, and adapters for providers beyond Claude.

@@ -61,7 +61,13 @@ Steps must be lowercase, kebab-case, filesystem-safe identifiers, in pipeline or
   return parsed;
 }
 
-export async function draftLogic(feature, description, brainDumpHistory, currentLogic) {
+export async function draftLogic(feature, description, brainDumpHistory, currentLogic, architectureText) {
+  const architectureNote = `You may also be given the project's overall architecture
+(LEDGER/architecture.md) as background context — use it only to keep this feature's Logic
+consistent with the bigger picture (e.g. which layer/component this belongs in, existing
+conventions to follow). Don't restate it, and don't let it override or invent beyond what the
+human actually said about THIS feature.`;
+
   const groundedSystem = `You draft a starting point for the "Logic" step of a feature in the
 Ledger Method. Logic is a high-level, human-understandable description of how a feature should
 work — the reasoning, not the implementation. This draft exists ONLY to give a human something to
@@ -73,25 +79,29 @@ yourself — it's to take THEIR reasoning and organize it into a coherent, well-
 clarify ambiguous points, surface gaps or unstated assumptions as open questions, and put it in
 plain prose and short bullet lists where useful. If a prior logic.md draft is included, refine it
 in light of the new round rather than starting over. Stay grounded in what they actually wrote;
-don't introduce major decisions they didn't make. Do not write code. Respond with ONLY the
-markdown content itself, nothing else: no frontmatter, no code fences around the whole thing, no
-meta-commentary about being a draft (the tool adds that banner itself), and no remarks about these
-instructions, what was or wasn't provided to you, or your own process — the human only ever sees
-the raw text you return, so open directly with the actual Logic content.`;
+don't introduce major decisions they didn't make. ${architectureNote} Do not write code. Respond
+with ONLY the markdown content itself, nothing else: no frontmatter, no code fences around the
+whole thing, no meta-commentary about being a draft (the tool adds that banner itself), and no
+remarks about these instructions, what was or wasn't provided to you, or your own process — the
+human only ever sees the raw text you return, so open directly with the actual Logic content.`;
 
   const improviseSystem = `You draft a starting point for the "Logic" step of a feature in the
 Ledger Method. Logic is a high-level, human-understandable description of how a feature should
 work — the reasoning, not the implementation. This draft exists ONLY to give a human something to
 react to, edit, and correct — it is explicitly not meant to be accepted as-is. Write it as a
 genuine, concrete attempt (not vague hand-waving), in plain prose and short bullet lists where
-useful. Do not write code. Respond with ONLY the markdown content itself, nothing else: no
-frontmatter, no code fences around the whole thing, no meta-commentary about being a draft (the
-tool adds that banner itself), and no remarks about these instructions or your own process — the
-human only ever sees the raw text you return, so open directly with the actual Logic content.`;
+useful. ${architectureNote} Do not write code. Respond with ONLY the markdown content itself,
+nothing else: no frontmatter, no code fences around the whole thing, no meta-commentary about
+being a draft (the tool adds that banner itself), and no remarks about these instructions or your
+own process — the human only ever sees the raw text you return, so open directly with the actual
+Logic content.`;
 
   const hasBrainDump = Boolean(brainDumpHistory && brainDumpHistory.trim());
 
   const promptParts = [`Feature: ${feature}`, `Description: ${description || '(no description provided)'}`];
+  if (architectureText && architectureText.trim()) {
+    promptParts.push(`Project architecture (LEDGER/architecture.md, background context only):\n${architectureText.trim()}`);
+  }
   if (hasBrainDump) promptParts.push(`Author's brain dump history:\n${brainDumpHistory.trim()}`);
   if (currentLogic && currentLogic.trim()) {
     promptParts.push(`Current logic.md (refine this in light of the brain dump above, don't discard it):\n${currentLogic.trim()}`);

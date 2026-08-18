@@ -58,6 +58,16 @@ export function stageAndCommit(relPaths, message) {
   return currentSha();
 }
 
+/** True if `relPath` is tracked by git (staging its deletion would otherwise error). */
+export function isTracked(relPath) {
+  try {
+    git(['ls-files', '--error-unmatch', '--', relPath]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function isClean() {
   const out = git(['status', '--porcelain']);
   return out.trim().length === 0;

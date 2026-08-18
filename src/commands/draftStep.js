@@ -2,12 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   findProjectRoot, stepFile, brainDumpFile, sketchFile, codeAnnotationsFile,
-  testOutlineFile, testFile, styleFile, LEDGER_DIRNAME,
+  testOutlineFile, testFile, styleFile, architectureFile, LEDGER_DIRNAME,
 } from '../lib/paths.js';
 import { loadIndex, saveIndex, getFeature, getCurrentVersion } from '../lib/index-store.js';
 import { readStepFile, writeStepFile } from '../lib/frontmatter.js';
 import { appendRound, readOrEmpty, KNOWN_STEP_TEMPLATES } from '../lib/templates.js';
 import { contentHash, hashOfFiles } from '../lib/hash.js';
+import { checkLogicIntegrity } from '../lib/logicIntegrity.js';
 import {
   draftLogic as aiDraftLogic,
   draftCode as aiDraftCode,
@@ -84,7 +85,8 @@ async function draftLogicStep(index, entry, feature, brainDump) {
       ? `Asking Claude to organize your brain dump into a "${feature}" logic draft...\n`
       : `Asking Claude to draft a starting point for "${feature}" logic...\n`
   );
-  const draft = await aiDraftLogic(feature, entry.description, hasHistory ? history : null, previousDraft);
+  const architectureText = readOrEmpty(architectureFile());
+  const draft = await aiDraftLogic(feature, entry.description, hasHistory ? history : null, previousDraft, architectureText);
 
   writeStepFile(file, parsed.data, DRAFT_BANNER + draft + '\n');
   const version = getCurrentVersion(entry);
@@ -359,6 +361,7 @@ export async function draftStep(step, feature, description) {
   const index = loadIndex();
   const entry = getFeature(index, feature);
   requireStepInPipeline(entry, feature, step);
+  checkLogicIntegrity(feature, entry);
 
   switch (step) {
     case 'logic':

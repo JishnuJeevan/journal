@@ -107,6 +107,16 @@ test('draftLogic includes the current draft for refinement when given', async ()
   assert.match(stub.calls[0].prompt, /Current logic\.md \(refine this/);
 });
 
+test('draftLogic includes architecture.md as background context when given', async () => {
+  const stub = new StubProvider('draft');
+  _setProviderForTesting(stub);
+
+  await draftLogic('auth', 'login flow', null, null, 'API layer talks to Postgres via a repository layer.');
+
+  assert.match(stub.calls[0].prompt, /Project architecture \(LEDGER\/architecture\.md, background context only\):\nAPI layer/);
+  assert.match(stub.calls[0].options.system, /background context/);
+});
+
 test('draftLogic treats a whitespace-only brain dump as absent', async () => {
   const stub = new StubProvider('draft');
   _setProviderForTesting(stub);

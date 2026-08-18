@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { findProjectRoot, stepFile, testOutlineFile, stepDir, indexFile } from '../lib/paths.js';
 import { loadIndex, saveIndex, getFeature } from '../lib/index-store.js';
-import { stageAndCommit } from '../lib/git.js';
+import { stageAndCommit, isTracked } from '../lib/git.js';
 import { writeStepFile } from '../lib/frontmatter.js';
 import { defaultBodyForStep, newStepFrontmatter } from '../lib/templates.js';
 
@@ -39,11 +39,19 @@ export async function newVersion(feature) {
   }
   if (entry.steps.includes('test')) {
     const outline = testOutlineFile(feature);
-    if (fs.existsSync(outline)) fs.rmSync(outline, { force: true });
-    relPaths.push(path.relative(root, outline));
+    const outlineRel = path.relative(root, outline);
+    if (fs.existsSync(outline)) {
+      const wasTracked = isTracked(outlineRel);
+      fs.rmSync(outline, { force: true });
+      if (wasTracked) relPaths.push(outlineRel); // stage the deletion — only if git ever knew about it
+    }
     const t = stepFile(feature, 'test');
-    if (fs.existsSync(t)) fs.rmSync(t, { force: true });
-    relPaths.push(path.relative(root, t));
+    const tRel = path.relative(root, t);
+    if (fs.existsSync(t)) {
+      const wasTracked = isTracked(tRel);
+      fs.rmSync(t, { force: true });
+      if (wasTracked) relPaths.push(tRel);
+    }
   }
 
   saveIndex(index);

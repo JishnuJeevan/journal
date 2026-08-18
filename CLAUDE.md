@@ -37,6 +37,9 @@ src/lib/ai-providers/claude-cli.js   — the only v1 adapter: shells out to `cla
                                         separate ANTHROPIC_API_KEY
 src/lib/ai-providers/util.js         — shared JSON-extraction helper for structured output
 src/lib/hash.js                      — sha256 helpers backing attribution + drift detection (§6.5)
+src/lib/logicIntegrity.js            — checks logic.md against what was last committed; called at
+                                        the top of every draft/commit call for a feature, since
+                                        Logic has no upstream to append a drift note to (§6.5)
 src/lib/dashboard.js, dashboard-template.html
                                       — index.json → dashboard-data transform, and the
                                         interactive template it's injected into (search, version

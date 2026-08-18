@@ -45,7 +45,7 @@ flags to pass through to `claude -p` can be set via `LEDGER_CLAUDE_CLI_ARGS`.
 
 ```bash
 cd your-project        # must be a git repo
-ledger init             # scaffolds LEDGER/ (index.json, config.json, style.md)
+ledger init             # scaffolds LEDGER/ (index.json, config.json, style.md, architecture.md)
 
 # --- starting a new project ---
 ledger list-features "brain dump of what you're building"
@@ -66,9 +66,13 @@ ledger draft logic user-authentication "users log in with email + magic link, se
 #   labeled history) and has AI organize the FULL history into logic.md — never inventing logic
 #   you didn't provide. Bare `ledger draft logic user-authentication` (no text) improvises from
 #   just the feature's name + description instead.
+# also reads LEDGER/architecture.md as background context (project-wide system shape), so the
+# feature's Logic stays consistent with the bigger picture without restating it
 # Edit the draft into your own words, then:
 ledger commit logic user-authentication
 # attribution is auto-detected — "person" if brain-dump.md has content, "ai" if not
+# logic.md is now locked for this version — any hand-edit bypassing new-version is flagged
+# (non-blocking) the next time you draft/commit ANY step on this feature
 
 # --- Code: AI implements from committed Logic ---
 ledger draft code user-authentication ["optional code-level sketch"]
@@ -132,6 +136,13 @@ generated (a direct hand-edit happened in between), the tool asks a single, skip
 non-blocking question — *"You edited this directly — what changed, in one sentence?"* — and
 appends the answer to the relevant upstream file (`logic.md` for code edits, `test-outline.md`
 for test edits). Skipped in non-interactive environments rather than hanging.
+
+**Logic integrity** gets the equivalent protection, but differently — Logic *is* the upstream, so
+there's nowhere to append a note. Once `commit logic` runs, `logic.md` is meant to stay locked
+until `new-version`; any `draft`/`commit` call on that feature (for any step, not just Logic)
+checks whether `logic.md` still matches what was committed, and — if it was hand-edited outside
+the proper flow — prints a non-blocking warning pointing at `new-version` immediately, every time,
+until you either run `new-version` or the check no longer applies.
 
 ## Dashboard (`LEDGER/index.html`)
 

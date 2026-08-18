@@ -12,6 +12,7 @@ import { readStepFile, writeStepFile } from '../lib/frontmatter.js';
 import { hasContent, appendNote } from '../lib/templates.js';
 import { contentHash, hashOfFiles } from '../lib/hash.js';
 import { loadConfig, saveConfig } from '../lib/ai-providers/provider.js';
+import { checkLogicIntegrity } from '../lib/logicIntegrity.js';
 import { buildDashboard } from './buildDashboard.js';
 
 function todayIso() {
@@ -127,6 +128,7 @@ export async function commitStep(step, feature, opts = {}) {
   const index = loadIndex();
   const entry = getFeature(index, feature);
   requireStepInPipeline(entry, feature, step);
+  checkLogicIntegrity(feature, entry);
   const version = getCurrentVersion(entry);
 
   if (version.steps[step]?.commitSha) {
@@ -216,13 +218,21 @@ export async function commitStep(step, feature, opts = {}) {
   );
 
   try {
+    let committedHash;
     if (step !== 'code' && step !== 'test') {
       const file = stepFile(feature, step);
       const after = readStepFile(file);
       writeStepFile(file, { ...after.data, commit_sha: contentSha }, after.content);
+      if (step === 'logic') committedHash = contentHash(fs.readFileSync(file, 'utf8'));
     }
 
-    version.steps[step] = { ...(version.steps[step] || {}), attribution, commitSha: contentSha, date };
+    version.steps[step] = {
+      ...(version.steps[step] || {}),
+      attribution,
+      commitSha: contentSha,
+      date,
+      ...(committedHash ? { committedHash } : {}),
+    };
     saveIndex(index);
 
     const recordRelPaths = [path.relative(root, indexFile())];

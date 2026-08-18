@@ -65,6 +65,10 @@ export function styleFile() {
   return path.join(ledgerRoot(), 'style.md');
 }
 
+export function architectureFile() {
+  return path.join(ledgerRoot(), 'architecture.md');
+}
+
 export function indexFile() {
   return path.join(ledgerRoot(), 'index.json');
 }
