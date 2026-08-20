@@ -23,9 +23,9 @@ export function checkLogicIntegrity(feature, entry) {
   const current = fs.readFileSync(file, 'utf8');
   if (contentHash(current) !== record.committedHash) {
     console.log(
-      `\nWarning: LEDGER/features/${feature}/logic/logic.md was hand-edited after \`commit logic\` — ` +
+      `\nWarning: JOURNAL/features/${feature}/logic/logic.md was hand-edited after \`commit logic\` — ` +
         `Logic is meant to stay locked until a new version. This doesn't block anything, but if it's a ` +
-        `real change (not just a typo fix), run \`ledger new-version ${feature}\`.`
+        `real change (not just a typo fix), run \`journal new-version ${feature}\`.`
     );
   }
 }

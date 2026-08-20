@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { findProjectRoot } from '../paths.js';
 import { extractJson } from './util.js';
 
-const BINARY = process.env.LEDGER_CLAUDE_BIN || 'claude';
+const BINARY = process.env.JOURNAL_CLAUDE_BIN || 'claude';
 
 /**
  * `modelUsage` in the JSON envelope can list more than one model (e.g. a small
@@ -72,9 +72,9 @@ export class ClaudeCliProvider {
     } catch (err) {
       if (err.code === 'ENOENT') {
         throw new Error(
-          `Could not find the "${BINARY}" CLI on PATH. The Ledger Method's AI commands run ` +
+          `Could not find the "${BINARY}" CLI on PATH. JOURNAL's AI commands run ` +
             `\`claude -p\` headlessly via your Claude Code subscription — make sure the Claude ` +
-            `Code CLI is installed and logged in, or set LEDGER_CLAUDE_BIN if it's installed ` +
+            `Code CLI is installed and logged in, or set JOURNAL_CLAUDE_BIN if it's installed ` +
             `under a different binary name.`
         );
       }
@@ -111,7 +111,7 @@ export class ClaudeCliProvider {
   // `claude -p` (it runs to a natural stopping point) — accepted and ignored.
   async generate(prompt, { system, structured = false } = {}) {
     const combined = system ? `${system}\n\n---\n\n${prompt}` : prompt;
-    const extraArgs = process.env.LEDGER_CLAUDE_CLI_ARGS;
+    const extraArgs = process.env.JOURNAL_CLAUDE_CLI_ARGS;
     const extra = extraArgs ? extraArgs.split(' ').filter(Boolean) : [];
 
     if (!structured) {

@@ -3,6 +3,70 @@
 Working log for picking up where a prior session left off. Static project facts belong in
 `CLAUDE.md` instead — keep this file to state that actually changes over time.
 
+## 2026-08-20 — v3 features + rename to JOURNAL
+
+- User filled in `docs/v2-feedback.md` from real dogfooding (a Sudoku project) and separately
+  hand-updated `docs/LEDGER-method-spec.md`/`docs/ledger-dashboard-template.html` with several
+  previously-open spec items now resolved. Implemented both in one pass:
+  - **§8.1 fragment-sharded storage**: rewrote `src/lib/index-store.js` around
+    `loadFeature`/`saveFeature` (one JSON file per feature under `index-fragments/`); every
+    command that used to read/write the single `index.json` now touches only its own feature's
+    fragment. `index.json` is generated-only (`aggregateIndex()`, called by `build-dashboard`).
+    Deferred §6.7's push-based lock detection at the user's explicit request (fragment sharding
+    alone already removes the cross-feature collision case) — if built later, make it opt-in, not
+    a silent change to what `commit-*` does.
+  - **§5 identity capture**: person entries carry `git config`/commit author name; ai entries
+    carry the actual responding model id. Required teaching `claude-cli.js` to request
+    `--output-format json` and parse the envelope — live-tested and found the envelope's
+    `modelUsage` can list more than one model (an auxiliary call alongside the real one); fixed by
+    picking the entry with the largest token volume, not the first object key.
+  - **§4.8 cross-feature dependencies**: `depends-on:` line in Logic, extracted at `commit logic`
+    (`src/lib/dependencies.js`). Live-tested with the real AI adapter and found it writes "Depends
+    on:" (space) rather than the literal "depends-on:" — loosened the extraction regex and added
+    an explicit instruction to the `draftLogic` prompt requesting the literal token.
+  - **§6.2 libraries + §4.8 safety net**: `src/lib/imports.js` scans imports at `commit code`,
+    recording external packages as `libraries` and warning (non-blocking) on an unrecorded
+    cross-feature import — both verified against a real committed feature.
+  - **`fix-error` (§4.6)**, scoped per explicit user direction to diagnosis-only: reads the error +
+    committed Logic + code, appends a plain-language diagnosis to `errors/diagnosis.md`. Never
+    edits code, never touches the `resolve-error` flow.
+  - Feedback-driven fixes: dashboard now rebuilds after `init`/`list-features`/`add-feature` too;
+    `list-features` no longer auto-groups (and orders proposals simplest-to-hardest, persisted as
+    each feature's `order`, which the dashboard now sorts by); `rename-group` with no new name
+    ungroups; `new-version` archives brain-dump/sketch/test-outline/code/test history instead of
+    silently discarding it (`brain-dump.v1.md`, `code-v1/`, `test.v1.md`); `test.md` gained a "how
+    to run" section and a "Verified passing" stamp on `commit test`, plus instructions for what to
+    write next to a manual checkbox; `log-error` takes separate error-output/description args;
+    `--file` flag on `draft`; a malformed structured AI response now retries up to 3x.
+  - Caught and fixed one more bug during live testing, unrelated to the above: `commit test`'s
+    "Verified passing" stamp used `^(# Test — .+\n\n)/` without the `m` flag, so it silently never
+    matched (the heading isn't at string-start, an HTML comment precedes it) — stamp was never
+    actually inserted. Also found — pre-existing, not introduced this session —
+    `index.html`/`index.json`/`config.json` were regenerated on disk but never `git add`ed by any
+    code path; added `stageAndCommitIfChanged` (a no-op-safe variant of `stageAndCommit`) and wired
+    it into `build-dashboard` and the `commit test` config-save path.
+  - All verified end-to-end against the real `claude -p` adapter in a scratch repo (fresh feature
+    through all four steps, `new-version`, errors log, `--file`, dashboard data shape), not just
+    `npm test` (27 passing).
+- **Same-day follow-up: renamed the whole project from "The Ledger Method" to JOURNAL**, per a new
+  `docs/JOURNAL-spec.md` + `docs/journal-dashboard-template.html` (confirmed via diff to be a pure
+  rename plus formalizing the already-built `fix-error` section into the spec — no new functional
+  requirements). `LEDGER/` → `JOURNAL/`, `ledger` binary → `journal`, `ledger-init` →
+  `journal-init`, `bin/ledger.js` → `bin/journal.js`, `src/commands/ledgerInit.js` →
+  `journalInit.js`, package name/bin entry, `LEDGER_CLAUDE_BIN`/`LEDGER_CLAUDE_CLI_ARGS` →
+  `JOURNAL_*`. Deleted the superseded `docs/LEDGER-method-spec.md`/`ledger-dashboard-template.html`
+  (the user had already tried to delete these once this session and had to restore them from
+  backup — confirmed re-deleting was the actual intent once the diff-check was done). Rewrote
+  `CLAUDE.md` and `README.md`, which had gone stale after the v3 work above (never updated at the
+  time) as well as the rename. Re-ran `npm link` (old `ledger` symlink removed, `journal` on PATH)
+  and re-verified end-to-end in a fresh scratch repo. `npm test` still 27/27.
+  - Note on tooling: several rounds of `sed -i ''` silently no-op'd or errored inconsistently
+    across files in this session, for reasons not fully root-caused (macOS/BSD sed; `\b` isn't
+    supported there, which explains part of it but not all of it) — switched to a small inline
+    Node script (plain `String.replace` over the file list) for the bulk of the rename, which
+    behaved deterministically. Worth defaulting to that approach over `sed -i` for any future
+    multi-file rename in this repo.
+
 ## 2026-08-18 — v2 rewrite
 
 - User rewrote `docs/LEDGER-method-spec.md` as a major overhaul (v1 → v2): versions replace

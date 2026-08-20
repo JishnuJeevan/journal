@@ -4,10 +4,10 @@ import { indexFile, fragmentsDir, fragmentFile } from './paths.js';
 
 /**
  * Storage layer (spec §8.1): each feature lives in its own fragment file under
- * LEDGER/index-fragments/<slug>.json. Every command reads/writes only the
+ * JOURNAL/index-fragments/<slug>.json. Every command reads/writes only the
  * fragment(s) for the feature(s) it's touching — two people committing to
  * different features never collide, by construction, since they touch
- * different files. LEDGER/index.json is generated-only, aggregated from the
+ * different files. JOURNAL/index.json is generated-only, aggregated from the
  * fragments by `build-dashboard` (§6.1, §6.4) — nothing else writes it.
  */
 
@@ -21,7 +21,7 @@ function atomicWrite(file, data) {
 
 /**
  * One-time, transparent upgrade path: if index-fragments/ doesn't exist yet but a
- * legacy single-file LEDGER/index.json does (pre-§8.1 projects), split it into
+ * legacy single-file JOURNAL/index.json does (pre-§8.1 projects), split it into
  * per-feature fragments so every read/write path below can assume fragments are
  * the source of truth. Safe to call repeatedly — no-ops once fragments exist.
  */
@@ -54,7 +54,7 @@ export function loadFeature(feature) {
   const file = fragmentFile(feature);
   if (!fs.existsSync(file)) {
     throw new Error(
-      `Unknown feature "${feature}". Run \`ledger list-features\` or \`ledger add-feature ${feature} "..."\` first.`
+      `Unknown feature "${feature}". Run \`journal list-features\` or \`journal add-feature ${feature} "..."\` first.`
     );
   }
   try {
@@ -86,7 +86,7 @@ export function loadAllFeatures() {
   return features;
 }
 
-/** Rebuilds the generated LEDGER/index.json snapshot from the fragments (§8.1). Only `build-dashboard` calls this. */
+/** Rebuilds the generated JOURNAL/index.json snapshot from the fragments (§8.1). Only `build-dashboard` calls this. */
 export function aggregateIndex() {
   return { version: 2, features: loadAllFeatures() };
 }

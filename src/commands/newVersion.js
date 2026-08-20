@@ -22,7 +22,7 @@ export async function newVersion(feature) {
   const entry = loadFeature(feature);
 
   if (!entry.steps) {
-    throw new Error(`Feature "${feature}" has no locked step pipeline yet — run \`ledger list-steps ${feature}\` first.`);
+    throw new Error(`Feature "${feature}" has no locked step pipeline yet — run \`journal list-steps ${feature}\` first.`);
   }
 
   const oldVersionNum = entry.currentVersion;
@@ -41,7 +41,7 @@ export async function newVersion(feature) {
 
     // Archive the previous version's brain-dump.md rather than carrying it forward
     // or erasing it (feedback: a fresh brain-dump.md per version, not the old one's
-    // rounds still sitting there) — "a ledger records a reversal, not an erasure"
+    // rounds still sitting there) — "a journal records a reversal, not an erasure"
     // (§9.3's principle, applied here too).
     const bdFile = brainDumpFile(feature, step);
     const archived = archiveRoundFile(bdFile, oldVersionNum);
@@ -52,7 +52,7 @@ export async function newVersion(feature) {
 
   // Code: archive the whole previous-version code/ dir (snapshot + sketch.md history)
   // as a sibling `code-v<N>/` rather than deleting it — the real source in `src/` isn't
-  // touched either way; this only affects LEDGER's own record of that version's snapshot.
+  // touched either way; this only affects JOURNAL's own record of that version's snapshot.
   if (entry.steps.includes('code')) {
     const codeDir = stepDir(feature, 'code');
     if (fs.existsSync(codeDir) && fs.readdirSync(codeDir).length > 0) {
@@ -89,7 +89,7 @@ export async function newVersion(feature) {
 
   const sha = stageAndCommit(
     Array.from(new Set(relPaths)),
-    `chore(ledger): start version ${newVersionNum} for ${feature}`
+    `chore(journal): start version ${newVersionNum} for ${feature}`
   );
 
   console.log(`Started version ${newVersionNum} for "${feature}". Committed ${sha.slice(0, 12)}.`);

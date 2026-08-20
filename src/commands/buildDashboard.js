@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { dashboardFile, ledgerRoot, stepFile, stepDir, testFile, featureDir, findProjectRoot, indexFile } from '../lib/paths.js';
+import { dashboardFile, journalRoot, stepFile, stepDir, testFile, featureDir, findProjectRoot, indexFile } from '../lib/paths.js';
 import { aggregateIndex, writeAggregatedIndex } from '../lib/index-store.js';
 import { buildDashboardData } from '../lib/dashboard.js';
 import { stageAndCommitIfChanged } from '../lib/git.js';
@@ -9,18 +9,18 @@ import { stageAndCommitIfChanged } from '../lib/git.js';
 const TEMPLATE_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'lib', 'dashboard-template.html');
 
 export async function buildDashboard() {
-  const ledger = ledgerRoot();
+  const journal = journalRoot();
   // §8.1: the only place fragments get aggregated into the generated index.json snapshot.
   const index = aggregateIndex();
   writeAggregatedIndex(index);
 
-  const relFromLedger = (slug, step, version, isCurrent) => {
+  const relFromJournal = (slug, step, version, isCurrent) => {
     if (isCurrent) {
       let abs;
       if (step === 'code') abs = stepDir(slug, 'code');
       else if (step === 'test') abs = testFile(slug);
       else abs = stepFile(slug, step);
-      return path.relative(ledger, abs);
+      return path.relative(journal, abs);
     }
     // §6.3/newVersion: code and test archive their previous version's content locally
     // (code-v<N>/, test.v<N>.md) rather than only relying on git history — link to
@@ -29,19 +29,19 @@ export async function buildDashboard() {
     // `git show <sha>` hint for those (built in buildDashboardData).
     if (step === 'code') {
       const abs = path.join(featureDir(slug), `code-v${version}`);
-      return fs.existsSync(abs) ? path.relative(ledger, abs) : null;
+      return fs.existsSync(abs) ? path.relative(journal, abs) : null;
     }
     if (step === 'test') {
       const abs = path.join(path.dirname(testFile(slug)), `test.v${version}.md`);
-      return fs.existsSync(abs) ? path.relative(ledger, abs) : null;
+      return fs.existsSync(abs) ? path.relative(journal, abs) : null;
     }
     return null;
   };
 
-  const data = buildDashboardData(index, { relFromLedger, generatedAt: new Date().toISOString() });
+  const data = buildDashboardData(index, { relFromJournal, generatedAt: new Date().toISOString() });
 
   const template = fs.readFileSync(TEMPLATE_PATH, 'utf8');
-  const html = template.replace('/*__LEDGER_DATA__*/', () => JSON.stringify(data));
+  const html = template.replace('/*__JOURNAL_DATA__*/', () => JSON.stringify(data));
 
   fs.writeFileSync(dashboardFile(), html, 'utf8');
   console.log(`Dashboard regenerated at ${dashboardFile()}`);
@@ -52,5 +52,5 @@ export async function buildDashboard() {
   // to commit" when called after an operation that didn't touch dashboard-visible state.
   const root = findProjectRoot();
   const relPaths = [path.relative(root, dashboardFile()), path.relative(root, indexFile())];
-  stageAndCommitIfChanged(relPaths, 'chore(ledger): rebuild dashboard');
+  stageAndCommitIfChanged(relPaths, 'chore(journal): rebuild dashboard');
 }

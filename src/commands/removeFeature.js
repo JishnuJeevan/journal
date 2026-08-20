@@ -18,11 +18,11 @@ export async function removeFeature(feature) {
   const root = findProjectRoot();
   const sha = stageAndCommit(
     [path.relative(root, fragmentFile(feature))],
-    `chore(ledger): remove-feature ${feature}`
+    `chore(journal): remove-feature ${feature}`
   );
 
-  console.log(`Marked "${feature}" removed. LEDGER/features/${feature}/ and its history are kept, just hidden by default in the dashboard.`);
+  console.log(`Marked "${feature}" removed. JOURNAL/features/${feature}/ and its history are kept, just hidden by default in the dashboard.`);
   console.log(`Committed ${sha.slice(0, 12)}.`);
-  console.log(`Reminder: this only updates the ledger — delete the real code from src/ yourself if you haven't already.`);
+  console.log(`Reminder: this only updates the journal — delete the real code from src/ yourself if you haven't already.`);
   await buildDashboard();
 }

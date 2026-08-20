@@ -2,7 +2,7 @@ import { getProvider } from './ai-providers/provider.js';
 
 export async function proposeFeatures(brainDump) {
   const system = `You help decompose a software project description into a list of discrete
-features, for a development methodology called the Ledger Method. A "feature" is a
+features, for a development methodology called JOURNAL. A "feature" is a
 discrete unit of functionality (a function, module, or user-facing capability).
 
 Respond with ONLY a JSON array, no prose, no markdown fences. Each element:
@@ -23,7 +23,7 @@ grouping is done later by the human, not proposed here.`;
 }
 
 export async function proposeFeaturesFromCode(fileTreeText) {
-  const system = `You are bootstrapping the Ledger Method (a structured, attribution-tracked
+  const system = `You are bootstrapping JOURNAL (a structured, attribution-tracked
 development methodology) onto an EXISTING codebase. You are given a list of its source files.
 Propose a decomposition into discrete features (same atomic-by-default principle as ordinary
 feature proposal — prefer several focused features over one broad one), each naming the source
@@ -42,7 +42,7 @@ lowercase, kebab-case, filesystem-safe.`;
 }
 
 export async function proposeSteps(feature, description) {
-  const system = `You propose a step pipeline for a feature in the Ledger Method, a development
+  const system = `You propose a step pipeline for a feature in JOURNAL, a development
 methodology where every feature passes through a sequence of steps (default: Logic, Code, Test,
 Document) before being considered complete. Additional steps (e.g. QA, Verification, Security
 Review) may be warranted for some features, but the default four are almost always sufficient —
@@ -66,7 +66,7 @@ Steps must be lowercase, kebab-case, filesystem-safe identifiers, in pipeline or
 
 export async function draftLogic(feature, description, brainDumpHistory, currentLogic, architectureText) {
   const architectureNote = `You may also be given the project's overall architecture
-(LEDGER/architecture.md) as background context — use it only to keep this feature's Logic
+(JOURNAL/architecture.md) as background context — use it only to keep this feature's Logic
 consistent with the bigger picture (e.g. which layer/component this belongs in, existing
 conventions to follow). Don't restate it, and don't let it override or invent beyond what the
 human actually said about THIS feature.`;
@@ -78,7 +78,7 @@ slugs, nothing else on the line) somewhere in the draft, since this is extracted
 tool. Omit the line entirely if no dependency was actually stated — don't invent one.`;
 
   const groundedSystem = `You draft a starting point for the "Logic" step of a feature in the
-Ledger Method. Logic is a high-level, human-understandable description of how a feature should
+JOURNAL. Logic is a high-level, human-understandable description of how a feature should
 work — the reasoning, not the implementation. This draft exists ONLY to give a human something to
 react to, edit, and correct — it is explicitly not meant to be accepted as-is.
 
@@ -95,7 +95,7 @@ remarks about these instructions, what was or wasn't provided to you, or your ow
 human only ever sees the raw text you return, so open directly with the actual Logic content.`;
 
   const improviseSystem = `You draft a starting point for the "Logic" step of a feature in the
-Ledger Method. Logic is a high-level, human-understandable description of how a feature should
+JOURNAL. Logic is a high-level, human-understandable description of how a feature should
 work — the reasoning, not the implementation. This draft exists ONLY to give a human something to
 react to, edit, and correct — it is explicitly not meant to be accepted as-is. Write it as a
 genuine, concrete attempt (not vague hand-waving), in plain prose and short bullet lists where
@@ -109,7 +109,7 @@ Logic content.`;
 
   const promptParts = [`Feature: ${feature}`, `Description: ${description || '(no description provided)'}`];
   if (architectureText && architectureText.trim()) {
-    promptParts.push(`Project architecture (LEDGER/architecture.md, background context only):\n${architectureText.trim()}`);
+    promptParts.push(`Project architecture (JOURNAL/architecture.md, background context only):\n${architectureText.trim()}`);
   }
   if (hasBrainDump) promptParts.push(`Author's brain dump history:\n${brainDumpHistory.trim()}`);
   if (currentLogic && currentLogic.trim()) {
@@ -125,7 +125,7 @@ Logic content.`;
 
 export async function draftCode(feature, { logicText, styleText, sketchHistory } = {}) {
   const system = `You write the actual implementation for the "Code" step of a feature in the
-Ledger Method. The feature's committed Logic (given below) is the primary input — infer file
+JOURNAL. The feature's committed Logic (given below) is the primary input — infer file
 structure, including multi-file splits, from what Logic describes, rather than inventing your own
 organization. If a code-level sketch from the author is included, follow its intent but you may
 correct or complete it. Consult the project's style preferences if given.
@@ -134,11 +134,11 @@ Respond with ONLY a JSON object, no prose, no markdown fences:
 { "files": [{ "path": "relative/path/from/project/root.ext", "content": "full file content" }], "notes": "one or two sentence summary of what you built" }
 
 Paths must be relative to the project root, must not escape it (no "..", no leading "/"), and
-should follow the project's existing source layout conventions where evident. "LEDGER/" is this
+should follow the project's existing source layout conventions where evident. "JOURNAL/" is this
 tool's own record-keeping directory, not part of the runnable project — never write files there.`;
 
   const promptParts = [`Feature: ${feature}`, `Committed Logic:\n${logicText || '(none)'}`];
-  if (styleText && styleText.trim()) promptParts.push(`Style preferences (LEDGER/style.md):\n${styleText.trim()}`);
+  if (styleText && styleText.trim()) promptParts.push(`Style preferences (JOURNAL/style.md):\n${styleText.trim()}`);
   if (sketchHistory && sketchHistory.trim()) promptParts.push(`Author's code sketch:\n${sketchHistory.trim()}`);
 
   const parsed = await getProvider().generate(promptParts.join('\n\n'), { system, structured: true });
@@ -149,7 +149,7 @@ tool's own record-keeping directory, not part of the runnable project — never 
 }
 
 export async function proposeTestOutline(feature, logicText) {
-  const system = `You propose a test plan for the "Test" step of a feature in the Ledger Method.
+  const system = `You propose a test plan for the "Test" step of a feature in JOURNAL.
 Derive candidate things to verify from the feature's committed Logic, and split them into
 "automatable" (checkable via a real code assertion) versus "manual" (things like layout/visual
 appearance that can't become a code assertion and need a human to look and confirm).
@@ -168,23 +168,22 @@ Respond with ONLY a JSON object, no prose, no markdown fences:
 }
 
 export async function draftTest(feature, { logicText, styleText, outlineText, codePaths } = {}) {
-  const system = `You generate the real content for the "Test" step of a feature in the Ledger
-Method. You are given the feature's committed Logic, the real source file(s) implementing it, and
+  const system = `You generate the real content for the "Test" step of a feature in JOURNAL. You are given the feature's committed Logic, the real source file(s) implementing it, and
 a test outline (possibly edited by the author from what was originally proposed) splitting
 verification into automatable items and manual/visual items. Write real, runnable test code for
 the automatable items only, following the testing framework/conventions in the project's style
 preferences if given, and importing/requiring the real source path(s) given — never a copy.
 
-"LEDGER/" is this tool's own record-keeping directory, not part of the runnable project — the
+"JOURNAL/" is this tool's own record-keeping directory, not part of the runnable project — the
 test file you write must live in the project's normal test location (e.g. alongside the source
-file, or under a conventional tests/__tests__ directory) and must NEVER be placed under LEDGER/.
+file, or under a conventional tests/__tests__ directory) and must NEVER be placed under JOURNAL/.
 
 Respond with ONLY a JSON object, no prose, no markdown fences:
-{ "testFilePath": "relative/path/to/a/real/test/file.ext (never under LEDGER/)", "testCode": "full file content for the automatable items", "manualItems": ["copy each manual item from the outline verbatim, or lightly cleaned up"] }`;
+{ "testFilePath": "relative/path/to/a/real/test/file.ext (never under JOURNAL/)", "testCode": "full file content for the automatable items", "manualItems": ["copy each manual item from the outline verbatim, or lightly cleaned up"] }`;
 
   const promptParts = [`Feature: ${feature}`, `Committed Logic:\n${logicText || '(none)'}`];
   if (codePaths && codePaths.length) promptParts.push(`Real source file(s) to test:\n${codePaths.join('\n')}`);
-  if (styleText && styleText.trim()) promptParts.push(`Style/testing preferences (LEDGER/style.md):\n${styleText.trim()}`);
+  if (styleText && styleText.trim()) promptParts.push(`Style/testing preferences (JOURNAL/style.md):\n${styleText.trim()}`);
   promptParts.push(`Test outline (author-reviewed):\n${outlineText || '(none)'}`);
 
   const parsed = await getProvider().generate(promptParts.join('\n\n'), { system, structured: true });
@@ -195,7 +194,7 @@ Respond with ONLY a JSON object, no prose, no markdown fences:
 }
 
 export async function draftDocument(feature, { logicText, codeContext } = {}) {
-  const system = `You draft the "Document" step of a feature in the Ledger Method — documentation
+  const system = `You draft the "Document" step of a feature in JOURNAL — documentation
 of what the code does, written so someone else (including future-you) can understand it without
 re-deriving the logic. Draft it from the feature's committed Logic and the code content given
 below. Respond with ONLY the markdown content itself, nothing else: no frontmatter, no code fences
@@ -210,7 +209,7 @@ directly with the actual documentation content.`;
 
 export async function organizeStep(feature, step, description, brainDumpHistory) {
   const system = `You organize a human's own raw notes into a coherent draft for the "${step}"
-step of a feature in the Ledger Method. Your job is NOT to invent content — it's to take THEIR
+step of a feature in JOURNAL. Your job is NOT to invent content — it's to take THEIR
 own reasoning (given below, possibly across several rounds) and organize it into clear prose
 and/or short bullet lists, clarifying ambiguity and surfacing gaps as open questions without
 introducing major decisions they didn't make. Respond with ONLY the markdown content itself,
@@ -224,7 +223,7 @@ sees the raw text you return, so open directly with the actual content.`;
 }
 
 export async function diagnoseError(feature, { errorText, logicText, codeContext } = {}) {
-  const system = `You diagnose a logged error for a feature in the Ledger Method, using its
+  const system = `You diagnose a logged error for a feature in JOURNAL, using its
 committed Logic and code as context. You do NOT write or edit code — this is a read-only
 diagnosis, not a fix. Explain, in plain language: (1) why this error most likely happened, given
 the Logic and code shown, and (2) a concrete suggested approach to fixing it (what to change and

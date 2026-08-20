@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Ledger — Dashboard</title>
+<title>Journal — Dashboard</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   :root {
@@ -75,7 +75,7 @@
 </head>
 <body>
 
-  <h1>Ledger Dashboard</h1>
+  <h1>Journal Dashboard</h1>
   <p class="generated" id="generatedNote"></p>
 
   <div class="toolbar">
@@ -101,8 +101,8 @@
 
 <script>
 /* =========================================================================
-   DATA — build-dashboard replaces LEDGER_DATA below with the real contents
-   translated from LEDGER/index.json. Everything from this line down to
+   DATA — build-dashboard replaces JOURNAL_DATA below with the real contents
+   translated from JOURNAL/index.json. Everything from this line down to
    "RENDERING LOGIC" is sample data only, demonstrating the expected shape —
    delete it once wired to real data.
 
@@ -171,7 +171,7 @@
    }
    ========================================================================= */
 
-const LEDGER_DATA = {
+const JOURNAL_DATA = {
   generatedAt: "2026-08-18T00:00:00.000Z",
   features: [
     {
@@ -190,18 +190,18 @@ const LEDGER_DATA = {
         {
           version: 1, current: false,
           stepData: {
-            logic: { attribution: "ai", identity: "claude-sonnet-4-6", sha: "0ff6a67", date: "2026-08-10", fileUrl: "LEDGER/features/user-login/logic/logic.md" },
-            code: { attribution: "ai", identity: "claude-sonnet-4-6", sha: "3009b59", date: "2026-08-10", fileUrl: "LEDGER/features/user-login/code/" },
-            test: { attribution: "person", identity: "Alice Chen", sha: "932bc8c", date: "2026-08-10", fileUrl: "LEDGER/features/user-login/test/test.md" },
-            document: { attribution: "ai", identity: "claude-sonnet-4-6", sha: "5536251", date: "2026-08-10", fileUrl: "LEDGER/features/user-login/document/document.md" }
+            logic: { attribution: "ai", identity: "claude-sonnet-4-6", sha: "0ff6a67", date: "2026-08-10", fileUrl: "JOURNAL/features/user-login/logic/logic.md" },
+            code: { attribution: "ai", identity: "claude-sonnet-4-6", sha: "3009b59", date: "2026-08-10", fileUrl: "JOURNAL/features/user-login/code/" },
+            test: { attribution: "person", identity: "Alice Chen", sha: "932bc8c", date: "2026-08-10", fileUrl: "JOURNAL/features/user-login/test/test.md" },
+            document: { attribution: "ai", identity: "claude-sonnet-4-6", sha: "5536251", date: "2026-08-10", fileUrl: "JOURNAL/features/user-login/document/document.md" }
           }
         },
         {
           version: 2, current: true,
           stepData: {
-            logic: { attribution: "person", identity: "Alice Chen", sha: "a1b2c3d", date: "2026-08-17", fileUrl: "LEDGER/features/user-login/logic/logic.md" },
-            code: { attribution: "person", identity: ["Alice Chen", "Bilal Rana"], sha: "e4f5a6b", date: "2026-08-17", fileUrl: "LEDGER/features/user-login/code/" },
-            test: { attribution: "person", identity: "Bilal Rana", sha: "c7d8e9f", date: "2026-08-17", fileUrl: "LEDGER/features/user-login/test/test.md" },
+            logic: { attribution: "person", identity: "Alice Chen", sha: "a1b2c3d", date: "2026-08-17", fileUrl: "JOURNAL/features/user-login/logic/logic.md" },
+            code: { attribution: "person", identity: ["Alice Chen", "Bilal Rana"], sha: "e4f5a6b", date: "2026-08-17", fileUrl: "JOURNAL/features/user-login/code/" },
+            test: { attribution: "person", identity: "Bilal Rana", sha: "c7d8e9f", date: "2026-08-17", fileUrl: "JOURNAL/features/user-login/test/test.md" },
             document: { attribution: null, identity: null, sha: null, date: null, fileUrl: null }
           }
         }
@@ -254,8 +254,8 @@ const LEDGER_DATA = {
         {
           version: 1, current: true,
           stepData: {
-            logic: { attribution: "person", sha: "7f2a9c1", date: "2026-08-15", fileUrl: "LEDGER/features/data-export/logic/logic.md" },
-            code: { attribution: "person", sha: "b3d8e02", date: "2026-08-15", fileUrl: "LEDGER/features/data-export/code/" },
+            logic: { attribution: "person", sha: "7f2a9c1", date: "2026-08-15", fileUrl: "JOURNAL/features/data-export/logic/logic.md" },
+            code: { attribution: "person", sha: "b3d8e02", date: "2026-08-15", fileUrl: "JOURNAL/features/data-export/code/" },
             test: { attribution: null, sha: null, date: null, fileUrl: null },
             document: { attribution: null, sha: null, date: null, fileUrl: null }
           }
@@ -274,8 +274,8 @@ const LEDGER_DATA = {
       pipelineSet: true,
       versions: [
         { version: 1, current: true, stepData: {
-          logic: { attribution: "person", sha: "9f8e7d6", date: "2026-08-01", fileUrl: "LEDGER/features/legacy-report-generator/logic/logic.md" },
-          code: { attribution: "ai", sha: "1a2b3c4", date: "2026-08-01", fileUrl: "LEDGER/features/legacy-report-generator/code/" }
+          logic: { attribution: "person", sha: "9f8e7d6", date: "2026-08-01", fileUrl: "JOURNAL/features/legacy-report-generator/logic/logic.md" },
+          code: { attribution: "ai", sha: "1a2b3c4", date: "2026-08-01", fileUrl: "JOURNAL/features/legacy-report-generator/code/" }
         }}
       ]
     },
@@ -294,8 +294,8 @@ const LEDGER_DATA = {
       pipelineSet: true,
       versions: [
         { version: 1, current: true, stepData: {
-          logic: { attribution: "person", sha: "2c4d6e8", date: "2026-08-17", fileUrl: "LEDGER/features/login-session-integration/logic/logic.md" },
-          test: { attribution: "person", sha: "8a1b3c5", date: "2026-08-17", fileUrl: "LEDGER/features/login-session-integration/test/test.md" }
+          logic: { attribution: "person", sha: "2c4d6e8", date: "2026-08-17", fileUrl: "JOURNAL/features/login-session-integration/logic/logic.md" },
+          test: { attribution: "person", sha: "8a1b3c5", date: "2026-08-17", fileUrl: "JOURNAL/features/login-session-integration/test/test.md" }
         }}
       ]
     }
@@ -303,7 +303,7 @@ const LEDGER_DATA = {
 };
 
 /* =========================================================================
-   RENDERING LOGIC — reusable as-is. Feed it LEDGER_DATA (or real data in
+   RENDERING LOGIC — reusable as-is. Feed it JOURNAL_DATA (or real data in
    the same shape) via renderDashboard(). No need to touch this per build.
    ========================================================================= */
 
@@ -330,7 +330,7 @@ function identityLabel(sd) {
 
 function renderStepGrid(feature, version) {
   if (!feature.pipelineSet) {
-    return '<p class="no-pipeline">Step pipeline not yet locked in — run <code>ledger list-steps ' + feature.slug + '</code>.</p>';
+    return '<p class="no-pipeline">Step pipeline not yet locked in — run <code>journal list-steps ' + feature.slug + '</code>.</p>';
   }
   const cells = feature.steps.map(step => {
     const sd = (version && version.stepData[step]) || {};
@@ -455,7 +455,7 @@ function renderGraph(data) {
 
 function renderDashboard(data) {
   document.getElementById("generatedNote").textContent =
-    "Generated " + data.generatedAt + " by ledger build-dashboard. Never hand-edit this file.";
+    "Generated " + data.generatedAt + " by journal build-dashboard. Never hand-edit this file.";
 
   const groups = {};
   data.features.forEach(f => {
@@ -487,7 +487,7 @@ function wireInteractions() {
     chip.addEventListener("click", () => {
       const slug = chip.getAttribute("data-slug");
       const targetV = Number(chip.getAttribute("data-v"));
-      const feature = LEDGER_DATA.features.find(f => f.slug === slug);
+      const feature = JOURNAL_DATA.features.find(f => f.slug === slug);
       const version = feature.versions.find(v => v.version === targetV);
       const card = document.querySelector('.feature[data-slug="' + slug + '"]');
       card.querySelectorAll(".v-chip").forEach(c => c.classList.toggle("active", Number(c.getAttribute("data-v")) === targetV));
@@ -549,9 +549,9 @@ function setView(view) {
   document.getElementById("emptyNote").style.display = "none";
 
   if (isList) {
-    renderDashboard(LEDGER_DATA);
+    renderDashboard(JOURNAL_DATA);
   } else {
-    document.getElementById("app").innerHTML = renderGraph(LEDGER_DATA);
+    document.getElementById("app").innerHTML = renderGraph(JOURNAL_DATA);
   }
 }
 

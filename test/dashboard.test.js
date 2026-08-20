@@ -26,10 +26,10 @@ test('transforms versions/steps into the template shape, with fileUrl only on th
   ];
   index.features['auth'] = entry;
 
-  // Mimics the real relFromLedger contract: only resolves a local file for the
+  // Mimics the real relFromJournal contract: only resolves a local file for the
   // current version (no per-version archive available in this test).
-  const relFromLedger = (slug, step, version, isCurrent) => (isCurrent ? 'features/auth/logic/logic.md' : null);
-  const data = buildDashboardData(index, { relFromLedger });
+  const relFromJournal = (slug, step, version, isCurrent) => (isCurrent ? 'features/auth/logic/logic.md' : null);
+  const data = buildDashboardData(index, { relFromJournal });
   const f = data.features.find((f) => f.slug === 'auth');
 
   assert.equal(f.group, 'authentication');
@@ -44,7 +44,7 @@ test('transforms versions/steps into the template shape, with fileUrl only on th
   assert.equal(v1.stepData.logic.attribution, 'person');
   assert.equal(v1.stepData.logic.sha, 'abc123def456');
   assert.equal(v1.stepData.logic.fileUrl, null); // historical — no local link
-  assert.equal(v1.stepData.logic.historicalHint, 'git show abc123def456:LEDGER/features/auth/logic/logic.md');
+  assert.equal(v1.stepData.logic.historicalHint, 'git show abc123def456:JOURNAL/features/auth/logic/logic.md');
 
   assert.equal(v2.stepData.logic.attribution, 'ai');
   assert.equal(v2.stepData.logic.fileUrl, 'features/auth/logic/logic.md'); // current — linked

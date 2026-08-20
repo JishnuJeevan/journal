@@ -113,7 +113,7 @@ test('draftLogic includes architecture.md as background context when given', asy
 
   await draftLogic('auth', 'login flow', null, null, 'API layer talks to Postgres via a repository layer.');
 
-  assert.match(stub.calls[0].prompt, /Project architecture \(LEDGER\/architecture\.md, background context only\):\nAPI layer/);
+  assert.match(stub.calls[0].prompt, /Project architecture \(JOURNAL\/architecture\.md, background context only\):\nAPI layer/);
   assert.match(stub.calls[0].options.system, /background context/);
 });
 

@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
 
-export const LEDGER_DIRNAME = 'LEDGER';
+export const JOURNAL_DIRNAME = 'JOURNAL';
 
 export function findProjectRoot() {
   try {
@@ -13,17 +13,17 @@ export function findProjectRoot() {
     return root;
   } catch {
     throw new Error(
-      'Not inside a git repository. The Ledger Method requires git — run `git init` first.'
+      'Not inside a git repository. JOURNAL requires git — run `git init` first.'
     );
   }
 }
 
-export function ledgerRoot() {
-  return path.join(findProjectRoot(), LEDGER_DIRNAME);
+export function journalRoot() {
+  return path.join(findProjectRoot(), JOURNAL_DIRNAME);
 }
 
 export function featureDir(feature) {
-  return path.join(ledgerRoot(), 'features', feature);
+  return path.join(journalRoot(), 'features', feature);
 }
 
 export function stepDir(feature, step) {
@@ -66,19 +66,19 @@ export function diagnosisFile(feature) {
 }
 
 export function styleFile() {
-  return path.join(ledgerRoot(), 'style.md');
+  return path.join(journalRoot(), 'style.md');
 }
 
 export function architectureFile() {
-  return path.join(ledgerRoot(), 'architecture.md');
+  return path.join(journalRoot(), 'architecture.md');
 }
 
 export function indexFile() {
-  return path.join(ledgerRoot(), 'index.json');
+  return path.join(journalRoot(), 'index.json');
 }
 
 export function fragmentsDir() {
-  return path.join(ledgerRoot(), 'index-fragments');
+  return path.join(journalRoot(), 'index-fragments');
 }
 
 export function fragmentFile(feature) {
@@ -86,17 +86,17 @@ export function fragmentFile(feature) {
 }
 
 export function configFile() {
-  return path.join(ledgerRoot(), 'config.json');
+  return path.join(journalRoot(), 'config.json');
 }
 
 export function dashboardFile() {
-  return path.join(ledgerRoot(), 'index.html');
+  return path.join(journalRoot(), 'index.html');
 }
 
-export function requireLedgerInitialized() {
+export function requireJournalInitialized() {
   if (!fs.existsSync(styleFile())) {
     throw new Error(
-      `${LEDGER_DIRNAME}/ isn't initialized here. Run \`ledger init\` first.`
+      `${JOURNAL_DIRNAME}/ isn't initialized here. Run \`journal init\` first.`
     );
   }
 }

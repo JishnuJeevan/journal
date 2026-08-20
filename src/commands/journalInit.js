@@ -15,14 +15,14 @@ function listTrackedFiles(root) {
   return out
     .split('\n')
     .filter(Boolean)
-    .filter((p) => !p.startsWith('LEDGER/') && !p.startsWith('node_modules/'));
+    .filter((p) => !p.startsWith('JOURNAL/') && !p.startsWith('node_modules/'));
 }
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export async function ledgerInit() {
+export async function journalInit() {
   const root = findProjectRoot();
   const files = listTrackedFiles(root);
 
@@ -53,7 +53,7 @@ export async function ledgerInit() {
   const { selected } = await prompts({
     type: 'multiselect',
     name: 'selected',
-    message: 'Bootstrap which features into LEDGER? (space to toggle, enter to confirm)',
+    message: 'Bootstrap which features into JOURNAL? (space to toggle, enter to confirm)',
     choices,
     hint: '- Space to select. Return to submit',
   });
@@ -107,7 +107,7 @@ export async function ledgerInit() {
 
   const sha = stageAndCommit(
     Array.from(new Set(relPaths)),
-    `chore(ledger): ledger-init bootstrap (${selected.map((f) => f.slug).join(', ')})`
+    `chore(journal): journal-init bootstrap (${selected.map((f) => f.slug).join(', ')})`
   );
 
   // Record the actual commit SHA into each bootstrapped feature's Code step.
@@ -121,11 +121,11 @@ export async function ledgerInit() {
     }
   }
   const recordSha = fragmentPaths.length
-    ? stageAndCommit(fragmentPaths, `chore(ledger): record ledger-init bootstrap SHA (${sha.slice(0, 12)})`)
+    ? stageAndCommit(fragmentPaths, `chore(journal): record journal-init bootstrap SHA (${sha.slice(0, 12)})`)
     : sha;
 
   console.log(`\nBootstrapped ${selected.length} feature(s). Committed ${sha.slice(0, 12)} and ${recordSha.slice(0, 12)}.`);
   console.log(`Code snapshots recorded with attribution "legacy". Logic/Test/Document left blank — draft them when ready.`);
-  console.log(`Re-run \`ledger-init\` any time — already-registered features are skipped automatically.`);
+  console.log(`Re-run \`journal-init\` any time — already-registered features are skipped automatically.`);
   await buildDashboard();
 }

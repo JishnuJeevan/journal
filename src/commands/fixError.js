@@ -52,10 +52,10 @@ export async function fixError(feature, opts = {}) {
 
   const sha = stageAndCommit(
     [path.relative(root, file)],
-    `chore(ledger): diagnose error #${target.id} for ${feature}`
+    `chore(journal): diagnose error #${target.id} for ${feature}`
   );
 
   console.log(`\n${diagnosis}\n`);
   console.log(`Appended to ${file}. Committed ${sha.slice(0, 12)}.`);
-  console.log(`Write the actual fix yourself, then: ledger resolve-error ${feature} "fix note" --id ${target.id}`);
+  console.log(`Write the actual fix yourself, then: journal resolve-error ${feature} "fix note" --id ${target.id}`);
 }

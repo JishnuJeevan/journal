@@ -47,7 +47,7 @@ export async function resolveError(feature, fixNote, opts = {}) {
 
   const sha = stageAndCommit(
     [path.relative(root, file), path.relative(root, fragmentFile(feature))],
-    `chore(ledger): resolve error #${target.id} for ${feature}`
+    `chore(journal): resolve error #${target.id} for ${feature}`
   );
   console.log(`Resolved #${target.id} (${attribution}${identity ? ` · ${identity}` : ''}). Committed ${sha.slice(0, 12)}.`);
   await buildDashboard();

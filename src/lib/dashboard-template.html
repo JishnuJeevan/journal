@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Ledger — Dashboard</title>
+<title>Journal — Dashboard</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   :root {
@@ -76,7 +76,7 @@
 </head>
 <body>
 
-  <h1>Ledger Dashboard</h1>
+  <h1>Journal Dashboard</h1>
   <p class="generated" id="generatedNote"></p>
 
   <div class="toolbar">
@@ -101,10 +101,10 @@
   <p class="empty-note" id="emptyNote" style="display:none;">No features match your search.</p>
 
 <script>
-/* Data shape: see docs/ledger-dashboard-template.html in The-Notes-Method repo (source of
-   truth for the shape reference) — injected here by `ledger build-dashboard` from
-   LEDGER/index.json. Do not hand-edit this file, it's regenerated on every build. */
-const LEDGER_DATA = /*__LEDGER_DATA__*/;
+/* Data shape: see docs/journal-dashboard-template.html in The-Notes-Method repo (source of
+   truth for the shape reference) — injected here by `journal build-dashboard` from
+   JOURNAL/index.json. Do not hand-edit this file, it's regenerated on every build. */
+const JOURNAL_DATA = /*__JOURNAL_DATA__*/;
 
 /* =========================================================================
    RENDERING LOGIC — reusable as-is.
@@ -133,7 +133,7 @@ function identityLabel(sd) {
 
 function renderStepGrid(feature, version) {
   if (!feature.pipelineSet) {
-    return '<p class="no-pipeline">Step pipeline not yet locked in — run <code>ledger list-steps ' + feature.slug + '</code>.</p>';
+    return '<p class="no-pipeline">Step pipeline not yet locked in — run <code>journal list-steps ' + feature.slug + '</code>.</p>';
   }
   const cells = feature.steps.map(step => {
     const sd = (version && version.stepData[step]) || {};
@@ -264,7 +264,7 @@ function renderGraph(data) {
 
 function renderDashboard(data) {
   document.getElementById("generatedNote").textContent =
-    "Generated " + data.generatedAt + " by ledger build-dashboard. Never hand-edit this file.";
+    "Generated " + data.generatedAt + " by journal build-dashboard. Never hand-edit this file.";
 
   const groups = {};
   data.features.forEach(f => {
@@ -296,7 +296,7 @@ function wireInteractions() {
     chip.addEventListener("click", () => {
       const slug = chip.getAttribute("data-slug");
       const targetV = Number(chip.getAttribute("data-v"));
-      const feature = LEDGER_DATA.features.find(f => f.slug === slug);
+      const feature = JOURNAL_DATA.features.find(f => f.slug === slug);
       const version = feature.versions.find(v => v.version === targetV);
       const card = document.querySelector('.feature[data-slug="' + slug + '"]');
       card.querySelectorAll(".v-chip").forEach(c => c.classList.toggle("active", Number(c.getAttribute("data-v")) === targetV));
@@ -358,9 +358,9 @@ function setView(view) {
   document.getElementById("emptyNote").style.display = "none";
 
   if (isList) {
-    renderDashboard(LEDGER_DATA);
+    renderDashboard(JOURNAL_DATA);
   } else {
-    document.getElementById("app").innerHTML = renderGraph(LEDGER_DATA);
+    document.getElementById("app").innerHTML = renderGraph(JOURNAL_DATA);
   }
 }
 

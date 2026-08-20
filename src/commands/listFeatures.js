@@ -8,7 +8,7 @@ import { buildDashboard } from './buildDashboard.js';
 
 export async function listFeatures(brainDump) {
   if (!brainDump || !brainDump.trim()) {
-    throw new Error('Usage: ledger list-features "<free-form description of your project>"');
+    throw new Error('Usage: journal list-features "<free-form description of your project>"');
   }
 
   console.log('Asking Claude to propose features from your description...\n');
@@ -34,7 +34,7 @@ export async function listFeatures(brainDump) {
   const { selected } = await prompts({
     type: 'multiselect',
     name: 'selected',
-    message: 'Register which features into LEDGER? (space to toggle, enter to confirm)',
+    message: 'Register which features into JOURNAL? (space to toggle, enter to confirm)',
     choices,
     hint: '- Space to select. Return to submit',
   });
@@ -56,9 +56,9 @@ export async function listFeatures(brainDump) {
     relPaths.push(path.relative(root, fragmentFile(f.slug)));
   }
 
-  const sha = stageAndCommit(relPaths, `chore(ledger): register features (${selected.map((f) => f.slug).join(', ')})`);
+  const sha = stageAndCommit(relPaths, `chore(journal): register features (${selected.map((f) => f.slug).join(', ')})`);
 
   console.log(`\nRegistered ${selected.length} feature(s). Committed ${sha.slice(0, 12)}.`);
   await buildDashboard();
-  console.log(`Next: ledger list-steps <feature> for each, to lock in its step pipeline.`);
+  console.log(`Next: journal list-steps <feature> for each, to lock in its step pipeline.`);
 }

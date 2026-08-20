@@ -17,7 +17,7 @@ function readPipedStdin() {
 
 /** `log-error <feature> [errorOutput] [description]` — the raw terminal/error output,
  * kept separate from your own account of what happened and where (feedback). Piped
- * input (e.g. `npm test | ledger log-error feature`) fills errorOutput automatically. */
+ * input (e.g. `npm test | journal log-error feature`) fills errorOutput automatically. */
 export async function logError(feature, errorOutput, description) {
   const entry = loadFeature(feature);
 
@@ -69,10 +69,10 @@ export async function logError(feature, errorOutput, description) {
   const root = findProjectRoot();
   const sha = stageAndCommit(
     [path.relative(root, file), path.relative(root, fragmentFile(feature))],
-    `chore(ledger): log error #${id} for ${feature}`
+    `chore(journal): log error #${id} for ${feature}`
   );
   console.log(`Logged as #${id}. Committed ${sha.slice(0, 12)}.`);
-  console.log(`Diagnose it with: ledger fix-error ${feature} --id ${id}`);
-  console.log(`Resolve it later with: ledger resolve-error ${feature} "fix note" --id ${id}`);
+  console.log(`Diagnose it with: journal fix-error ${feature} --id ${id}`);
+  console.log(`Resolve it later with: journal resolve-error ${feature} "fix note" --id ${id}`);
   await buildDashboard();
 }

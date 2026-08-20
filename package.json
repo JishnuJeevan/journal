@@ -1,11 +1,11 @@
 {
-  "name": "ledger-method",
+  "name": "journal",
   "version": "0.1.0",
-  "description": "CLI for the Ledger Method — a structured, attribution-tracked, AI-assisted development workflow.",
+  "description": "CLI for JOURNAL — a structured, attribution-tracked, AI-assisted development workflow.",
   "type": "module",
   "main": "src/cli.js",
   "bin": {
-    "ledger": "./bin/ledger.js"
+    "journal": "./bin/journal.js"
   },
   "engines": {
     "node": ">=18"

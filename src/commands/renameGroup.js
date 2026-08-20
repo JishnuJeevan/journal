@@ -7,7 +7,7 @@ import { buildDashboard } from './buildDashboard.js';
 /** Omitting `newName` ungroups every feature currently tagged `oldName`, same convention as set-group. */
 export async function renameGroup(oldName, newName) {
   if (!oldName) {
-    throw new Error('Usage: ledger rename-group <old-group-name> [<new-group-name>]');
+    throw new Error('Usage: journal rename-group <old-group-name> [<new-group-name>]');
   }
 
   const all = loadAllFeatures();
@@ -28,7 +28,7 @@ export async function renameGroup(oldName, newName) {
     relPaths.push(path.relative(root, fragmentFile(slug)));
   }
 
-  const sha = stageAndCommit(relPaths, `chore(ledger): rename-group ${oldName} -> ${newName || '(none)'}`);
+  const sha = stageAndCommit(relPaths, `chore(journal): rename-group ${oldName} -> ${newName || '(none)'}`);
 
   console.log(
     newName

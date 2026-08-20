@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { init } from './commands/init.js';
-import { ledgerInit } from './commands/ledgerInit.js';
+import { journalInit } from './commands/journalInit.js';
 import { listFeatures } from './commands/listFeatures.js';
 import { addFeature } from './commands/addFeature.js';
 import { setGroup } from './commands/setGroup.js';
@@ -34,19 +34,19 @@ function run(fn) {
 export function buildProgram() {
   const program = new Command();
   program
-    .name('ledger')
-    .description('CLI for the Ledger Method — a structured, attribution-tracked, AI-assisted development workflow.')
+    .name('journal')
+    .description('CLI for JOURNAL — a structured, attribution-tracked, AI-assisted development workflow.')
     .version('0.1.0');
 
   program
     .command('init')
-    .description('Scaffold the LEDGER/ folder in the current git repository')
+    .description('Scaffold the JOURNAL/ folder in the current git repository')
     .action(run(init));
 
   program
-    .command('ledger-init')
+    .command('journal-init')
     .description('One-time bootstrap for an existing codebase: proposes features + pipelines from tracked files, snapshots Code with attribution "legacy"')
-    .action(run(ledgerInit));
+    .action(run(journalInit));
 
   program
     .command('list-features <brainDump>')
@@ -71,7 +71,7 @@ export function buildProgram() {
 
   program
     .command('remove-feature <feature>')
-    .description('Mark a feature removed (hidden by default in the dashboard) — does not delete its LEDGER history')
+    .description('Mark a feature removed (hidden by default in the dashboard) — does not delete its JOURNAL history')
     .action(run(removeFeature));
 
   program
@@ -93,7 +93,7 @@ export function buildProgram() {
 
   program
     .command('commit <step> <feature>')
-    .description('Record attribution + identity (auto-detected), commit the step, and record it into LEDGER/index-fragments/<feature>.json')
+    .description('Record attribution + identity (auto-detected), commit the step, and record it into JOURNAL/index-fragments/<feature>.json')
     .option('--add-path <path>', 'link an additional code path (step "code" only, repeatable)', collect, [])
     .action(run((step, feature, opts) => commitStep(step, feature, opts)));
 
@@ -122,7 +122,7 @@ export function buildProgram() {
 
   program
     .command('build-dashboard')
-    .description('Aggregate LEDGER/index-fragments/*.json into LEDGER/index.json and regenerate LEDGER/index.html')
+    .description('Aggregate JOURNAL/index-fragments/*.json into JOURNAL/index.json and regenerate JOURNAL/index.html')
     .action(run(buildDashboard));
 
   return program;

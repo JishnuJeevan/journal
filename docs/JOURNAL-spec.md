@@ -1,4 +1,4 @@
-# The Ledger Method — Specification
+# JOURNAL — Specification
 
 > **Status:** Draft for implementation. This document is meant to be handed to an AI coding assistant (e.g. Claude Code) to build and evolve the tool. Open questions are marked explicitly in §12 and should not be silently resolved by the implementer — flag them back to the author instead.
 
@@ -8,7 +8,7 @@
 
 AI-assisted coding has made it easy to generate working software without engaging with, or understanding, the code that was produced. This creates a specific failure mode: when something breaks, the person who "wrote" the software cannot debug it, because they never actually understood it in the first place.
 
-The Ledger Method is a development methodology (and accompanying tool) designed around four principles:
+JOURNAL is a CLI tool built around a specific discipline for staying engaged with AI-assisted development, designed around four principles:
 
 1. **Engagement** — the person building the software must actively participate in each stage, not just approve AI output.
 2. **Understanding** — the person must understand the code and the logic behind it, not just see that it runs.
@@ -20,6 +20,8 @@ This is explicitly **not** a tool for people who want to vibe-code faster, or wh
 A core workflow principle that runs through this whole method: **features are defined before code is written**, **Logic is defined before Code is written**, and **Logic is defined before Test is written** — each step downstream draws from what was decided upstream, never the reverse (except through the explicit drift-flagging mechanism in §6.5, which surfaces divergence rather than silently allowing it).
 
 **A key lesson from early dogfooding, worth stating explicitly:** the biggest barrier to understanding AI-generated code usually isn't *who* wrote it — it's a mismatch between the code's structure/style and how the person themselves thinks about the problem, and a lack of anything concrete to verify against once code exists. The fixes that emerged from this: let the person provide the *shape* of a solution (via Logic, refined iteratively — §4.1), have Code and Test both derive from that shape rather than inventing their own, and give the person a concrete way to check the result (annotations for unfamiliar code, §6.6; a verification checklist for things that can't be asserted in code, §4.3).
+
+**JOURNAL has quietly become a teaching tool as much as a development tool, worth naming directly.** The clearest example: `fix-error` (§4.6) diagnoses a bug — explains why it likely happened and suggests an approach — but deliberately never writes the fix itself. An error is the moment a person's mental model of the code was wrong; it's arguably the single highest-leverage moment for actual understanding in the whole pipeline, since it's a concrete, specific gap between expectation and reality, not an abstract one. Auto-fixing it would remove exactly that moment. This isn't a one-off design choice — it's the same "AI organizes/explains, the human does the part that produces understanding" pattern used throughout JOURNAL (Logic, Code, Test), applied once more at the debugging stage.
 
 ---
 
@@ -33,7 +35,7 @@ A core workflow principle that runs through this whole method: **features are de
 | **Attribution** | A tag recorded per step, per version, describing how that step's content was produced: **person**, **ai**, or **legacy**. Automatically detected from tool usage (§5) — not self-reported. |
 | **Brain dump** | Free-form input the user provides when drafting a step (raw notes, pseudocode). AI organizes/completes it rather than inventing content from nothing. For Logic, this is an iterative, persistent file (§4.1), not a one-shot input. |
 | **Test outline** | The Test step's analogue of a brain dump — a proposed (then user-editable) list of what should be verified for a feature, split into automatable and manual/visual items (§4.3). |
-| **Group** | An optional label attached to a feature purely for dashboard organization (e.g. `authentication`). Flat tagging, not structural nesting — features stay in `LEDGER/features/` with no parent/child hierarchy. Assignable by AI (proposed alongside features during `list-features`) or by the user (at `add-feature` time, or retroactively via `set-group`). |
+| **Group** | An optional label attached to a feature purely for dashboard organization (e.g. `authentication`). Flat tagging, not structural nesting — features stay in `JOURNAL/features/` with no parent/child hierarchy. Assignable by AI (proposed alongside features during `list-features`) or by the user (at `add-feature` time, or retroactively via `set-group`). |
 
 ---
 
@@ -43,7 +45,7 @@ A core workflow principle that runs through this whole method: **features are de
 project-root/
 ├── src/                          (actual project code)
 ├── tests/                        (actual, runnable test files — e.g. pytest)
-├── LEDGER/
+├── JOURNAL/
 │   ├── index.html                 <- generated dashboard. NEVER hand-edited.
 │   ├── index.json                 <- aggregated data source for the dashboard, generated only (§8.1)
 │   ├── index-fragments/           <- per-feature write targets, avoids multi-user collisions (§6.7, §8.1)
@@ -65,7 +67,8 @@ project-root/
 │   │       ├── document/
 │   │       │   └── document.md
 │   │       └── errors/
-│   │           └── errors.md       <- flat, append-only error log for this feature (§4.6)
+│   │           ├── errors.md       <- flat, append-only error log for this feature (§4.6)
+│   │           └── diagnosis.md    <- append-only diagnoses from fix-error, cross-referenced by error # (§4.6)
 ```
 
 ---
@@ -74,7 +77,7 @@ project-root/
 
 ### 4.1 Logic
 
-- **What it is:** A high-level, human-understandable description of how the feature should work. This is the step where the human's own understanding is the actual product, and the primary input to both Code (§4.2) and Test (§4.3). `draft logic` also reads `LEDGER/architecture.md` (§7) as background context, so the feature's reasoning stays consistent with the overall system shape without restating it.
+- **What it is:** A high-level, human-understandable description of how the feature should work. This is the step where the human's own understanding is the actual product, and the primary input to both Code (§4.2) and Test (§4.3). `draft logic` also reads `JOURNAL/architecture.md` (§7) as background context, so the feature's reasoning stays consistent with the overall system shape without restating it.
 - **Command:** `draft logic <feature> ["brain dump text"]` (i.e. `draft <step> <feature> ["description"]`, §11, with step=logic)
 
 **Iterative refinement mechanism:**
@@ -88,9 +91,9 @@ project-root/
 - **What it is:** The actual implementation, derived from the feature's committed Logic (the primary input — `draft code` reads it directly, and a well-written Logic naturally determines file structure, including multi-file splits, without a separate mechanism for that).
 - **Command:** `draft code <feature> ["sketch"]` (i.e. `draft <step> <feature>`, §11, with step=code and the optional argument used as a sketch)
 - **Optional sketch input:** the user may additionally provide a rough code-level sketch/pseudocode, which persists to `code/sketch.md` — every sketch kept, same as `brain-dump.md` does for Logic, rather than being used once and discarded. Confirmed decision, for the same future diff-scoring reasons.
-- **Style:** consults `LEDGER/style.md` (§7) before generating.
+- **Style:** consults `JOURNAL/style.md` (§7) before generating.
 - **Annotations:** produces `code/annotations.md` flagging unfamiliar terms not present in the Logic (§6.6).
-- **Snapshot:** the real code lives in `src/`; an exact copy is synced to `LEDGER/features/feature-x/code/` at commit time (§6.2).
+- **Snapshot:** the real code lives in `src/`; an exact copy is synced to `JOURNAL/features/feature-x/code/` at commit time (§6.2).
 - **Open/undecided:** whether to show a short outline of planned code structure before writing the full implementation (§12).
 
 ### 4.3 Test
@@ -132,11 +135,13 @@ This means there's no hard split between "steps we've designed for" and "everyth
 
 Not one of the four/customizable steps — a separate, flat, append-only log per feature (`errors/errors.md`), for capturing runtime errors and how they were resolved. Unlike the steps above, it isn't tied to a version — an error can happen at any time, including well after every step has been committed.
 
-- **Logging an error:** `log-error <feature> ["description"]`. If output is piped in (e.g. `npm test | ledger log-error tic-tac-toe`), that becomes the entry automatically. Without piped input or a description, an empty entry opens for manual filling — same fallback pattern as Logic (§4.1). Creates a new, timestamped, **open** entry.
+- **Logging an error:** `log-error <feature> ["description"]`. If output is piped in (e.g. `npm test | journal log-error tic-tac-toe`), that becomes the entry automatically. Without piped input or a description, an empty entry opens for manual filling — same fallback pattern as Logic (§4.1). Creates a new, timestamped, **open** entry.
 - **Resolving it:** `resolve-error <feature> ["fix note"] [--id <n>] [--agent]` — appends the fix to the most recent open entry (or a specific one via `--id`) and marks it resolved. For longer explanations than the one-line note supports, the user can hand-edit `errors.md` directly afterward — `resolve-error` is meant for the quick note and the status flip together; anything added by hand afterward is purely additive to an already-resolved entry.
 - **Attribution — who fixed it:** detected from *how the command was invoked*, not self-reported, consistent with the rest of this method. An AI agent acting autonomously (e.g. fixing a bug on its own without the user typing the command) passes `--agent` when calling `resolve-error`; its absence means a human ran it directly, which is the default (`person`). This is the same "let the mechanism declare it, don't ask anyone to self-report" principle used for step attribution (§5) — just applied to *who invoked the command* rather than *what content was given*.
 - **AI does not use this automatically.** An AI agent (e.g. Claude Code) working on the project won't spontaneously start using `log-error`/`resolve-error` just because they exist — it only does so if explicitly instructed to as part of its working instructions for the project. Worth stating directly to any AI agent given autonomy over running/fixing a feature, if this record is wanted.
 - **Dashboard:** surfaced as its own cell per feature (§8) — clicking it expands the list of entries (open and resolved), each showing its fix note and attribution dot, same visual treatment as a step.
+- **Diagnosing before fixing:** `fix-error <feature> [--id <n>]` reads a logged error (most recent open one by default, or a specific one via `--id`) plus the feature's Logic and code, and generates a diagnosis — why the error likely happened, and a suggested approach. **It does not edit code** — no autonomous mode, no assisted-write mode, text output only. The diagnosis is appended to `errors/diagnosis.md`, one entry per error, cross-referenced by the same error number used in `errors.md` (e.g. "Diagnosis for Error #3"), never overwritten — same append-only pattern as `errors.md` and `brain-dump.md`. The person reads it, writes the actual fix themselves, then runs `resolve-error` as normal — `fix-error` only adds a diagnosis step before that; it doesn't change how resolving works.
+- **Why not autonomous:** an error is the moment a person's mental model of the code was wrong — arguably the highest-leverage moment for understanding in the whole pipeline, since it's a concrete, specific gap between expectation and reality. Auto-fixing it would remove exactly that moment, the same failure mode as the original tic-tac-toe episode that motivated this whole method, just relocated to debugging instead of initial implementation. This is also why `fix-error` correctly results in `person` attribution once resolved (§5) — AI explaining the problem doesn't make the fix AI's work; the person writing the actual code is what does.
 
 ### 4.7 Integration Testing (cross-feature behavior)
 
@@ -152,11 +157,11 @@ Test (§4.3) is scoped to one feature and derives from that feature's own Logic 
 
 ### 4.8 Cross-Feature Dependencies (declared, not inferred)
 
-Real automatic dependency detection would need either static analysis of Code (only possible *after* Code exists — too late to inform the Logic that precedes it) or semantic comparison of Logic text (the same hard problem as upgrading §6.6's annotations from textual to semantic). Neither exists. The practical middle ground: **dependencies are explicitly declared, not inferred** — this is a deliberate exception to the method's usual "detect automatically, don't self-report" principle, made only because no automatic alternative currently exists (unlike every other place self-report was avoided in favor of a cheap automatic signal).
+Real automatic dependency detection would need either static analysis of Code (only possible *after* Code exists — too late to inform the Logic that precedes it) or semantic comparison of Logic text (the same hard problem as upgrading §6.6's annotations from textual to semantic). Neither exists. The practical middle ground: **dependencies are explicitly declared, not inferred** — this is a deliberate exception to JOURNAL's usual "detect automatically, don't self-report" principle, made only because no automatic alternative currently exists (unlike every other place self-report was avoided in favor of a cheap automatic signal).
 
 - **Declared inside Logic itself**, not a separate mechanism — a `depends-on:` line naming other features, written as part of the same reasoning process where the dependency is actually being decided. `commit logic` extracts it the same way it already extracts attribution/SHA/identity (§5), writing it into that feature's fragment (§8.1).
 - **Inherits Logic's existing protections for free.** Because it lives inside `logic.md`, a declared dependency is automatically covered by Logic's lock-after-commit and drift detection (§6.5) — no new locking mechanism needed.
-- **Visual graph, inside the existing dashboard, as a toggle — not a separate file.** Same reasoning as Integration Tests (§4.7, §8): one file, switching what's displayed, not navigating away. Nodes are features, edges are declared dependencies, Obsidian-style — this is the only surface for viewing dependencies; a separate plain-text CLI command (`ledger deps`) was considered and cut, since folding the graph into the same dashboard file removed most of the friction that would have justified a second, terminal-only view of the identical data.
+- **Visual graph, inside the existing dashboard, as a toggle — not a separate file.** Same reasoning as Integration Tests (§4.7, §8): one file, switching what's displayed, not navigating away. Nodes are features, edges are declared dependencies, Obsidian-style — this is the only surface for viewing dependencies; a separate plain-text CLI command (`journal deps`) was considered and cut, since folding the graph into the same dashboard file removed most of the friction that would have justified a second, terminal-only view of the identical data.
 - **Self-report safety net:** extends §6.6's annotations — every feature's `codePaths` are already recorded (§3, §6.2), so if generated code imports something matching another feature's recorded `codePaths` that was never named in that feature's `depends-on`, flag it. Not full static analysis, just a path match against data already collected — catches a forgotten declaration after the fact, even though it can't prevent one.
 - **Fixing a caught, missed dependency requires `new-version` — no lighter exception.** Because Code is drafted from *committed* Logic (§4.2), by the time the safety net above can even fire, Logic is already locked. Logic has no "minor edit, one-line note" tier the way Code/Test do (§6.5) — every post-commit Logic change, including adding a missed `depends-on` line, points at `new-version`. This was a deliberate choice, not an oversight: a narrower exception (fixing just the dependency line without a full version bump) was considered and rejected in favor of staying consistent with Logic's strict lock, even though it means a single missed dependency costs a full new version to correct.
 - **Claim vs. evidence, deferred:** a future upgrade — once real static analysis exists — could overlay *actual* Code-level dependencies against *declared* ones and flag mismatches. Not built now; declared dependencies plus the annotations safety net is the whole of v1.
@@ -169,7 +174,7 @@ Attribution is recorded per step, per version, and is **automatically detected f
 
 - **`person`** — a brain dump (Logic) or sketch (Code) was provided/present when the draft command produced its result. For Logic specifically, this reflects the latest state of `brain-dump.md` at commit time, not a per-round score.
 - **`ai`** — no brain dump/sketch was present; AI generated the content from the feature/file description alone.
-- **`legacy`** — content originates from `ledger-init`'s bootstrap of a pre-existing codebase (§9.1).
+- **`legacy`** — content originates from `journal-init`'s bootstrap of a pre-existing codebase (§9.1).
 
 **Specific identity, not just category — captured automatically, no new self-report.** Every step's commit already carries real identity data the tool was previously discarding:
 
@@ -185,10 +190,10 @@ Attribution is recorded per step, per version, and is **automatically detected f
 ## 6. Git Integration
 
 ### 6.1 Commit-per-step
-Each step has its own commit command. Running it determines attribution (§5), performs a git commit, and records the SHA into that feature's fragment file (§8.1) — never the shared `LEDGER/index.json` directly.
+Each step has its own commit command. Running it determines attribution (§5), performs a git commit, and records the SHA into that feature's fragment file (§8.1) — never the shared `JOURNAL/index.json` directly.
 
 ### 6.2 Code snapshot sync
-`commit code` copies the relevant code into `LEDGER/features/feature-x/code/`, tagged with the commit SHA. The same pass also scans those files' import/require statements and records external packages referenced (filtering out relative/in-project imports) as that feature's `libraries` list in its fragment (§8.1) — fully automatic, no self-report, since this is plain syntax parsing rather than the harder semantic problem §4.8's feature-to-feature dependencies ran into. Not to be confused with §4.8's `dependsOn` — that's *feature*-to-*feature*; this is *feature*-to-*external package*.
+`commit code` copies the relevant code into `JOURNAL/features/feature-x/code/`, tagged with the commit SHA. The same pass also scans those files' import/require statements and records external packages referenced (filtering out relative/in-project imports) as that feature's `libraries` list in its fragment (§8.1) — fully automatic, no self-report, since this is plain syntax parsing rather than the harder semantic problem §4.8's feature-to-feature dependencies ran into. Not to be confused with §4.8's `dependsOn` — that's *feature*-to-*feature*; this is *feature*-to-*external package*.
 
 ### 6.3 Historical access via SHA
 Old-version links in the dashboard resolve via `git show <sha>:<path>`, since step files are overwritten each version.
@@ -206,7 +211,7 @@ Because Code and Test are meant to be primarily driven by upstream files (Logic,
 
 This check is **post-commit**, not blocking — `commit code`/`commit test` complete normally first, and the check runs afterward.
 
-**Logic itself needs the equivalent protection, but Logic has no upstream to append a note to** — it *is* the upstream. Once `commit logic` has run, `logic.md` is meant to be locked (§4.1) until `new-version`. This is currently only a stated norm, not detected — a real gap, since Logic is the most important file in the method and currently has weaker protection than the files that derive from it. The fix: the same before/after comparison used for Code and Test applies here too — any `draft`/`commit` command touching that feature checks whether `logic.md` still matches what was last committed. If it was hand-edited outside `draft logic` + `commit logic` since the last commit, flag it immediately (not appended anywhere, since there's nowhere upstream to append to) and point directly at `new-version` — there's no "minor edit, one-line note" tier for Logic the way there is for Code/Test, since a real Logic change already meets the definition of what a version is (§2). **Non-blocking**, same as Code and Test — the flag warns and recommends `new-version`, but doesn't refuse to run further commands on that feature; the tool never auto-starts a new version on its own, that decision stays with the user.
+**Logic itself needs the equivalent protection, but Logic has no upstream to append a note to** — it *is* the upstream. Once `commit logic` has run, `logic.md` is meant to be locked (§4.1) until `new-version`. This is currently only a stated norm, not detected — a real gap, since Logic is the most important file in JOURNAL and currently has weaker protection than the files that derive from it. The fix: the same before/after comparison used for Code and Test applies here too — any `draft`/`commit` command touching that feature checks whether `logic.md` still matches what was last committed. If it was hand-edited outside `draft logic` + `commit logic` since the last commit, flag it immediately (not appended anywhere, since there's nowhere upstream to append to) and point directly at `new-version` — there's no "minor edit, one-line note" tier for Logic the way there is for Code/Test, since a real Logic change already meets the definition of what a version is (§2). **Non-blocking**, same as Code and Test — the flag warns and recommends `new-version`, but doesn't refuse to run further commands on that feature; the tool never auto-starts a new version on its own, that decision stays with the user.
 
 ### 6.6 Code annotations (unfamiliar-term flagging)
 
@@ -223,7 +228,7 @@ Two people committing to *different* features around the same time never collide
 Two people committing to the **same feature** at the same time is a real conflict, not a false one from shared-file structure, and is handled by extending the lock already defined in §4.1:
 
 - **"First" is determined by git's own push order, not local commit order** — nothing new to build here. Git already rejects a push when the remote has changes the pusher doesn't have (standard behavior); this is the natural trigger point, not a separate network check the tool has to add on every local command.
-- **When the second person pulls and their local commit collides with the fragment now on the remote, the tool stops them and presents a choice — it does not auto-decide for them.** They're told a version was already locked (by whom), and can either run `new-version` themselves to carry their work forward, or discard it if it turns out to be unnecessary. Consistent with the method's standing rule that the tool flags and blocks but never silently makes a versioning decision on someone's behalf (same principle as Logic drift detection, §6.5).
+- **When the second person pulls and their local commit collides with the fragment now on the remote, the tool stops them and presents a choice — it does not auto-decide for them.** They're told a version was already locked (by whom), and can either run `new-version` themselves to carry their work forward, or discard it if it turns out to be unnecessary. Consistent with JOURNAL's standing rule that it flags and blocks but never silently makes a versioning decision on someone's behalf (same principle as Logic drift detection, §6.5).
 - **Nothing is overwritten.** v1 stays exactly as committed, recoverable via `git show <sha>:<path>` (§6.3); a chosen `new-version` builds v2 explicitly on top of it. Same "preserve, don't erase" principle as `remove-feature` (§9.3).
 - **Actually resolving the disagreement (is the second person's work still needed?) is a human/team conversation, not something the tool automates or forces** — it can surface who locked the version, but coordinating from there is outside its scope.
 
@@ -231,13 +236,13 @@ Two people committing to the **same feature** at the same time is a real conflic
 
 ## 7. Global Style, Testing, and Architecture
 
-A single project-level file, `LEDGER/style.md`, holds:
+A single project-level file, `JOURNAL/style.md`, holds:
 - **Code style preferences** — e.g. "prefer simple, explicit statements over clever one-liners."
 - **Testing preferences** — e.g. "Python tests: use pytest." Only needs to cover the kinds of code actually being automated-tested; features whose testing is entirely manual/visual (e.g. UI appearance) don't require any testing-library preference at all, since those items become checklist entries, not code (§4.3).
 
 Both `draft code` and `draft test` read this file every time they run. Set once, early; editable any time, applying to all future calls. A one-off override for a single call is reasonable as a flag rather than changing the global file.
 
-**Architecture** gets its own sibling file, `LEDGER/architecture.md`, rather than living inside style.md or any single feature's Logic. Architecture — the overall system shape, major components, how they relate, key structural decisions — is a project-wide concern like style, not a feature-wide one like Logic; putting it inside one feature's Logic creates an ownership problem (which feature's Logic gets to describe the whole system?), and duplicating it across every feature's Logic is worse. `draft logic` reads `architecture.md` as background context so an individual feature's Logic stays consistent with the bigger picture without restating it. Freeform with a light scaffold (component list, data flow, key decisions) — a starting point, not a schema, same treatment as Performance's template-seeding (§4.5).
+**Architecture** gets its own sibling file, `JOURNAL/architecture.md`, rather than living inside style.md or any single feature's Logic. Architecture — the overall system shape, major components, how they relate, key structural decisions — is a project-wide concern like style, not a feature-wide one like Logic; putting it inside one feature's Logic creates an ownership problem (which feature's Logic gets to describe the whole system?), and duplicating it across every feature's Logic is worse. `draft logic` reads `architecture.md` as background context so an individual feature's Logic stays consistent with the bigger picture without restating it. Freeform with a light scaffold (component list, data flow, key decisions) — a starting point, not a schema, same treatment as Performance's template-seeding (§4.5).
 
 This is a lightweight answer to the cross-feature/module-interaction question raised early on and deliberately deferred — not the full thing (no formal dependency modeling between features, no drift detection between stated architecture and actual implementation), just giving that reasoning an honest place to live rather than nowhere. The fuller version stays open (§12).
 
@@ -252,12 +257,12 @@ This is a lightweight answer to the cross-feature/module-interaction question ra
 - **Removed features:** hidden by default (a toggle reveals them) — the dashboard's default view shows only active features, keeping it uncluttered, while removed features (§9.3) remain fully present in the underlying data for anyone who wants to look.
 - **Not yet surfaced in the dashboard (deferred, §12):** whether a feature's manual test checklist is fully checked off. The Errors log is now surfaced (§4.6) — a per-feature cell showing open/resolved entries with attribution.
 
-### 8.1 Data source: sharded fragments, aggregated into `LEDGER/index.json`
+### 8.1 Data source: sharded fragments, aggregated into `JOURNAL/index.json`
 
 `build-dashboard`'s output role is unchanged — it still reads one flat, fast-to-parse file to render from. What changed is the *write* path, to remove a real multi-user collision (§6.7):
 
 ```
-LEDGER/
+JOURNAL/
 ├── index.json           <- unchanged role: what build-dashboard reads to render. Generated only.
 ├── index-fragments/
 │   ├── login.json         <- only commits to "login" touch this
@@ -273,18 +278,18 @@ LEDGER/
 
 ## 9. Bootstrapping onto an Existing Project
 
-### 9.1 `ledger-init` — one-time onboarding
+### 9.1 `journal-init` — one-time onboarding
 A one-time bootstrap for pre-existing projects: scans the codebase, proposes a feature list + step pipeline per feature (user reviews/adjusts), populates Code snapshots immediately, leaves Logic/Test/Document blank with attribution `legacy`. Safe to re-run without overwriting real (non-`legacy`) entries.
 
 ### 9.2 Ongoing feature creation stays feature-first
-`list-features` (bulk, at the start) or `add-feature` (one at a time, later) — never `ledger-init` re-runs — is how new features get added going forward. `list-features` proposes features atomic by default (e.g. a "Login," "Signup," "Password Reset," and "Session Management" split rather than one large "Authentication" feature) — a focused Logic is easier to write well than one covering several concerns at once. The review step doubles as where the user merges an over-split proposal back together, or asks for finer breakdown.
+`list-features` (bulk, at the start) or `add-feature` (one at a time, later) — never `journal-init` re-runs — is how new features get added going forward. `list-features` proposes features atomic by default (e.g. a "Login," "Signup," "Password Reset," and "Session Management" split rather than one large "Authentication" feature) — a focused Logic is easier to write well than one covering several concerns at once. The review step doubles as where the user merges an over-split proposal back together, or asks for finer breakdown.
 
 ### 9.3 Removing a feature
 Removal is intentionally split into two separate actions, not one command:
 1. **The user deletes the feature's real code from `src/` themselves**, as a normal part of working in the codebase. The tool doesn't attempt to automatically identify and strip a feature's code from the rest of the project — too risky to safely automate.
-2. **The user then runs `remove-feature <feature>`** to update LEDGER accordingly.
+2. **The user then runs `remove-feature <feature>`** to update JOURNAL accordingly.
 
-`remove-feature` marks the feature `removed` in `index.json` — it does **not** delete the LEDGER folder or its files. This matches the method's own premise: a ledger records a reversal, it doesn't erase the original entry. The dashboard (§8) hides removed features by default so the active view stays uncluttered, with a toggle to reveal them — so the record of what a removed feature was, and its full history, stays available without anyone needing to dig through git.
+`remove-feature` marks the feature `removed` in `index.json` — it does **not** delete the JOURNAL folder or its files. This matches JOURNAL's own premise: a journal never erases a past entry, even a mistaken one — you write forward, not over. The dashboard (§8) hides removed features by default so the active view stays uncluttered, with a toggle to reveal them — so the record of what a removed feature was, and its full history, stays available without anyone needing to dig through git.
 
 ---
 
@@ -298,12 +303,12 @@ AI-powered commands call a single internal interface (`AIProvider.generate(promp
 
 | Command | Purpose |
 |---|---|
-| `ledger-init` | One-time bootstrap for an existing project (§9.1). |
+| `journal-init` | One-time bootstrap for an existing project (§9.1). |
 | `list-features` | Bulk brain-dump → proposed feature list, atomic by default (§2), with a suggested group tag per feature (§2); human reviews/adjusts both. |
 | `add-feature <name> ["description"] [--group <group-name>]` | Adds a single new feature before any code is written for it. Group tag optional. |
 | `set-group <feature> [<feature> ...] [<group-name>]` | Assigns or changes the group tag for one or more features in one call. Omitting `<group-name>` clears the tag (ungroups) for all listed features. |
 | `rename-group <old-group-name> <new-group-name>` | Retags every feature currently tagged `<old-group-name>` to `<new-group-name>`, in one operation. |
-| `remove-feature <feature>` | Marks a feature `removed` in `index.json` after its real code has been manually deleted from `src/` by the user first. LEDGER folder and files are kept, not deleted — preserves the record. |
+| `remove-feature <feature>` | Marks a feature `removed` in `index.json` after its real code has been manually deleted from `src/` by the user first. JOURNAL folder and files are kept, not deleted — preserves the record. |
 | `list-steps <feature>` | Proposes a step pipeline for a feature; human confirms. |
 | `add-step <feature> <step-name>` | Registers a step for a feature already underway (folder + pipeline entry only, no content — see §4.5). |
 | `draft <step> <feature> ["description"]` | Unified content-generation command for any step, default or custom. Behavior is step-specific under the hood: Logic (§4.1) manages iterative `brain-dump.md` refinement; Code (§4.2) reads committed Logic (+ optional sketch), consults `style.md`, produces `annotations.md`; Test (§4.3) runs its two-phase outline-then-generate flow; any other step follows the description/template/blank logic in §4.5. |
@@ -311,7 +316,8 @@ AI-powered commands call a single internal interface (`AIProvider.generate(promp
 | `new-version <feature>` | Starts a new version (revision pass) for a feature. |
 | `log-error <feature> ["description"]` | Logs a new, open error entry for a feature (§4.6). Piped input is captured automatically; otherwise uses the description or opens an empty entry. |
 | `resolve-error <feature> ["fix note"] [--id <n>] [--agent]` | Appends a fix to the most recent open error entry (or a specific one via `--id`), marking it resolved. `--agent` marks attribution as `ai` (AI-agent-invoked); its absence means `person`. |
-| `build-dashboard` | Aggregates all `index-fragments/*.json` into `LEDGER/index.json` (§8.1), then regenerates `index.html` from it — includes the List/Graph toggle (§8) and the Integration Tests auto-section (§4.7). |
+| `fix-error <feature> [--id <n>]` | Generates a diagnosis (why the error likely happened, a suggested approach) from the logged error plus Logic and code — appended to `errors/diagnosis.md`. Does not edit code; the person implements the fix themselves before running `resolve-error` (§4.6). |
+| `build-dashboard` | Aggregates all `index-fragments/*.json` into `JOURNAL/index.json` (§8.1), then regenerates `index.html` from it — includes the List/Graph toggle (§8) and the Integration Tests auto-section (§4.7). |
 
 ---
 
@@ -319,7 +325,7 @@ AI-powered commands call a single internal interface (`AIProvider.generate(promp
 
 - Whether a feature's manual test checklist completion status surfaces in the dashboard.
 - **Team collaboration, still open:** shared understanding across multiple contributors (attribution now shows *who*, per §5, but doesn't address whether each person actually understood what they committed), and whether `index.html` should be `.gitignore`d as a generated artifact (currently committed as-is). Deliberately unaddressed until real multi-person use surfaces what actually breaks.
-- Generalization of the method beyond coding (research, data science, project management).
+- Generalization of JOURNAL beyond coding (research, data science, project management).
 - Degree-of-collaboration attribution scoring via before/after diffs, and scoring based on full `brain-dump.md`/`sketch.md`/`test-outline.md` round history rather than just the latest state — deferred until there's a clearer need/use case.
 - Per-step AI provider configuration, and adapters for providers beyond Claude.
 - Whether `draft code` should show a short outline/preview of planned code structure before writing full implementation.

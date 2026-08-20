@@ -15,8 +15,8 @@ export async function listSteps(feature, opts = {}) {
   if (!featureExists(feature)) {
     if (!opts.description) {
       throw new Error(
-        `Unknown feature "${feature}". Register it first with \`ledger list-features\`, ` +
-          `or create it inline with \`ledger list-steps ${feature} --description "..."\`.`
+        `Unknown feature "${feature}". Register it first with \`journal list-features\`, ` +
+          `or create it inline with \`journal list-steps ${feature} --description "..."\`.`
       );
     }
     entry = newFeatureEntry({ name: feature, description: opts.description, order: nextOrder() });
@@ -27,7 +27,7 @@ export async function listSteps(feature, opts = {}) {
   if (entry.steps) {
     throw new Error(
       `Feature "${feature}" already has a locked step pipeline: [${entry.steps.join(', ')}]. ` +
-        `Step pipelines are immutable in v1 once locked — use \`ledger add-step\` to add one.`
+        `Step pipelines are immutable in v1 once locked — use \`journal add-step\` to add one.`
     );
   }
 
@@ -114,10 +114,10 @@ export async function listSteps(feature, opts = {}) {
 
   const sha = stageAndCommit(
     relPaths,
-    `chore(ledger): lock step pipeline for ${feature} (${finalSteps.join(', ')})`
+    `chore(journal): lock step pipeline for ${feature} (${finalSteps.join(', ')})`
   );
 
   console.log(`\nLocked in. Committed ${sha.slice(0, 12)}.`);
   await buildDashboard();
-  console.log(`Next: ledger draft ${finalSteps[0]} ${feature}`);
+  console.log(`Next: journal draft ${finalSteps[0]} ${feature}`);
 }

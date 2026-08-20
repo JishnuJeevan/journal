@@ -5,14 +5,14 @@ import { stageAndCommit } from '../lib/git.js';
 import { buildDashboard } from './buildDashboard.js';
 
 /**
- * `args` is the full trailing arg list from `ledger set-group <feature...> [<group-name>]`.
+ * `args` is the full trailing arg list from `journal set-group <feature...> [<group-name>]`.
  * Since features and a trailing group name are positionally indistinguishable, disambiguate
  * against the actual registered features: if the last arg is itself a registered feature,
  * there's no group name (clear the tag for everyone); otherwise it's the group name to set.
  */
 export async function setGroup(args) {
   if (!args || args.length === 0) {
-    throw new Error('Usage: ledger set-group <feature> [<feature> ...] [<group-name>]');
+    throw new Error('Usage: journal set-group <feature> [<feature> ...] [<group-name>]');
   }
 
   const last = args[args.length - 1];
@@ -21,7 +21,7 @@ export async function setGroup(args) {
   const groupName = lastIsFeature ? undefined : last;
 
   if (features.length === 0) {
-    throw new Error('Usage: ledger set-group <feature> [<feature> ...] [<group-name>]');
+    throw new Error('Usage: journal set-group <feature> [<feature> ...] [<group-name>]');
   }
 
   const entries = features.map((f) => [f, loadFeature(f)]); // validate all exist before mutating any
@@ -36,7 +36,7 @@ export async function setGroup(args) {
 
   const sha = stageAndCommit(
     relPaths,
-    `chore(ledger): set-group ${features.join(', ')} -> ${groupName || '(none)'}`
+    `chore(journal): set-group ${features.join(', ')} -> ${groupName || '(none)'}`
   );
 
   console.log(

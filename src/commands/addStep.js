@@ -11,7 +11,7 @@ export async function addStep(feature, stepName) {
   const entry = loadFeature(feature);
 
   if (!entry.steps) {
-    throw new Error(`Feature "${feature}" has no locked step pipeline yet — run \`ledger list-steps ${feature}\` first.`);
+    throw new Error(`Feature "${feature}" has no locked step pipeline yet — run \`journal list-steps ${feature}\` first.`);
   }
   if (entry.steps.includes(stepName)) {
     throw new Error(`Feature "${feature}" already has a "${stepName}" step.`);
@@ -53,8 +53,8 @@ export async function addStep(feature, stepName) {
 
   saveFeature(feature, entry);
 
-  const sha = stageAndCommit(relPaths, `chore(ledger): add-step ${stepName} to ${feature}`);
+  const sha = stageAndCommit(relPaths, `chore(journal): add-step ${stepName} to ${feature}`);
   console.log(`Added "${stepName}" to ${feature}'s pipeline (registered — no content generated yet). Committed ${sha.slice(0, 12)}.`);
   await buildDashboard();
-  console.log(`Next: ledger draft ${stepName} ${feature} ["description"]`);
+  console.log(`Next: journal draft ${stepName} ${feature} ["description"]`);
 }

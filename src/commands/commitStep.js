@@ -148,7 +148,7 @@ function checkMissedDependencies(feature, entry, root, realCodeFiles) {
     console.log(
       `\nNote: this code imports from feature(s) not declared in ${feature}'s Logic (\`depends-on:\`): ` +
         `${[...missed].join(', ')}. Not blocking — but if real, add a \`depends-on:\` line to Logic and ` +
-        `run \`ledger new-version ${feature}\` to record it properly.`
+        `run \`journal new-version ${feature}\` to record it properly.`
     );
   }
 }
@@ -163,7 +163,7 @@ export async function commitStep(step, feature, opts = {}) {
   if (version.steps[step]?.commitSha) {
     throw new Error(
       `"${step}" for "${feature}" is already committed for version ${version.version}. ` +
-        `Run \`ledger new-version ${feature}\` to start a fresh revision.`
+        `Run \`journal new-version ${feature}\` to start a fresh revision.`
     );
   }
 
@@ -193,7 +193,7 @@ export async function commitStep(step, feature, opts = {}) {
     libraries = externalLibraries(specs);
   } else if (step === 'test') {
     if (!version.steps.test?.generatedHash) {
-      throw new Error(`No generated test content yet for "${feature}" — run \`ledger draft test ${feature}\` (both phases) first.`);
+      throw new Error(`No generated test content yet for "${feature}" — run \`journal draft test ${feature}\` (both phases) first.`);
     }
 
     const config = loadConfig();
@@ -202,7 +202,7 @@ export async function commitStep(step, feature, opts = {}) {
       const { cmd } = await prompts({
         type: 'text',
         name: 'cmd',
-        message: "How should I run this project's automated tests? (saved to LEDGER/config.json for future commit-test runs)",
+        message: "How should I run this project's automated tests? (saved to JOURNAL/config.json for future commit-test runs)",
       });
       if (!cmd || !cmd.trim()) throw new Error('Cancelled — commit test needs a test command to verify automated tests pass.');
       testCommand = cmd.trim();
@@ -227,7 +227,7 @@ export async function commitStep(step, feature, opts = {}) {
     // Feedback: stamp that the automated section was actually verified, and against
     // what command — not just that a draft exists. Re-baseline generatedHash against
     // this stamped content so the post-commit drift check doesn't flag its own stamp.
-    const stampLine = `**Verified passing:** ${date} via \`${testCommand}\` (\`ledger commit test\`)\n\n`;
+    const stampLine = `**Verified passing:** ${date} via \`${testCommand}\` (\`journal commit test\`)\n\n`;
     if (!tContent.includes('**Verified passing:**')) {
       tContent = tContent.replace(/^(# Test — .+\n\n)/m, `$1${stampLine}`);
       fs.writeFileSync(tFile, tContent, 'utf8');
@@ -244,7 +244,7 @@ export async function commitStep(step, feature, opts = {}) {
   } else {
     const file = stepFile(feature, step);
     if (!fs.existsSync(file)) {
-      throw new Error(`${file} does not exist. Run \`ledger list-steps ${feature}\` or \`ledger add-step ${feature} ${step}\` first.`);
+      throw new Error(`${file} does not exist. Run \`journal list-steps ${feature}\` or \`journal add-step ${feature} ${step}\` first.`);
     }
     contentRelPaths.push(path.relative(root, file));
     const bd = relIfExists(root, brainDumpFile(feature, step));
@@ -309,18 +309,18 @@ export async function commitStep(step, feature, opts = {}) {
     if (step !== 'code' && step !== 'test') recordRelPaths.push(path.relative(root, stepFile(feature, step)));
     const recordSha = stageAndCommit(
       recordRelPaths,
-      `chore(ledger): record ${feature} ${step} version ${version.version} SHA (${contentSha.slice(0, 12)})`
+      `chore(journal): record ${feature} ${step} version ${version.version} SHA (${contentSha.slice(0, 12)})`
     );
 
     console.log(`Committed ${step} for "${feature}" (${attribution}${identity ? ` · ${identity}` : ''}): ${contentSha.slice(0, 12)}`);
-    console.log(`Recorded in LEDGER/index-fragments/${feature}.json: ${recordSha.slice(0, 12)}`);
+    console.log(`Recorded in JOURNAL/index-fragments/${feature}.json: ${recordSha.slice(0, 12)}`);
   } catch (err) {
     console.error(
-      `\nCONTENT WAS COMMITTED (${contentSha}) but recording it into LEDGER/index-fragments/${feature}.json failed:\n` +
+      `\nCONTENT WAS COMMITTED (${contentSha}) but recording it into JOURNAL/index-fragments/${feature}.json failed:\n` +
         `  ${err.message}\n\n` +
         `The dashboard will be out of sync until this is fixed. Options:\n` +
-        `  - Fix whatever failed and re-run \`ledger commit ${step} ${feature}\`\n` +
-        `  - Or manually edit LEDGER/index-fragments/${feature}.json and commit it yourself.`
+        `  - Fix whatever failed and re-run \`journal commit ${step} ${feature}\`\n` +
+        `  - Or manually edit JOURNAL/index-fragments/${feature}.json and commit it yourself.`
     );
     throw err;
   }
@@ -346,7 +346,7 @@ export async function commitStep(step, feature, opts = {}) {
       if (answered) {
         stageAndCommit(
           [path.relative(root, stepFile(feature, 'logic'))],
-          `chore(ledger): drift note for ${feature} code edit`
+          `chore(journal): drift note for ${feature} code edit`
         );
       }
     }
@@ -358,7 +358,7 @@ export async function commitStep(step, feature, opts = {}) {
       if (answered) {
         stageAndCommit(
           [path.relative(root, testOutlineFile(feature))],
-          `chore(ledger): drift note for ${feature} test edit`
+          `chore(journal): drift note for ${feature} test edit`
         );
       }
     }

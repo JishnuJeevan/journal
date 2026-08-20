@@ -22,10 +22,10 @@ export async function addFeature(name, description, opts = {}) {
   const root = findProjectRoot();
   const sha = stageAndCommit(
     [path.relative(root, fragmentFile(slug))],
-    `chore(ledger): add feature ${slug}`
+    `chore(journal): add feature ${slug}`
   );
 
   console.log(`Registered "${slug}". Committed ${sha.slice(0, 12)}.`);
   await buildDashboard();
-  console.log(`Next: ledger list-steps ${slug}`);
+  console.log(`Next: journal list-steps ${slug}`);
 }

@@ -8,14 +8,14 @@ Describe how this feature should work, in your own words: the reasoning,
 not the implementation. This is the step where your own understanding is
 the actual product — everything else exists to serve or record it.
 
-Use \`ledger draft logic <feature> "<brain dump>"\` to add your raw thinking to
+Use \`journal draft logic <feature> "<brain dump>"\` to add your raw thinking to
 brain-dump.md and have AI organize it here, or edit this file directly. Either
-way, understand this before running \`ledger commit logic <feature>\`.
+way, understand this before running \`journal commit logic <feature>\`.
 -->
 `,
   test: `<!--
 Point-in-time snapshot of the real, runnable test file plus the manual/visual
-checklist, synced automatically by \`ledger draft test\`. Automated content is
+checklist, synced automatically by \`journal draft test\`. Automated content is
 overwritten each draft — hand-edit the manual checklist items' checkboxes only.
 -->
 `,

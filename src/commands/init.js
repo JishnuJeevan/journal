@@ -1,13 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { findProjectRoot, ledgerRoot, fragmentsDir, configFile, styleFile, architectureFile, LEDGER_DIRNAME } from '../lib/paths.js';
+import { findProjectRoot, journalRoot, fragmentsDir, configFile, styleFile, architectureFile, JOURNAL_DIRNAME } from '../lib/paths.js';
 import { stageAndCommit } from '../lib/git.js';
 import { saveConfig, DEFAULT_PROVIDER } from '../lib/ai-providers/provider.js';
 import { buildDashboard } from './buildDashboard.js';
 
 const STYLE_STUB = `# Global style & testing preferences
 
-Read by \`ledger draft code\` and \`ledger draft test\` every time they run. Edit any time —
+Read by \`journal draft code\` and \`journal draft test\` every time they run. Edit any time —
 changes apply to future drafts. A one-off override for a single call is a flag on that call,
 not a change here.
 
@@ -24,7 +24,7 @@ not a change here.
 const ARCHITECTURE_STUB = `# Architecture
 
 Project-wide system shape — major components, how they relate, key structural decisions. Read
-by \`ledger draft logic\` as background context, so an individual feature's Logic stays
+by \`journal draft logic\` as background context, so an individual feature's Logic stays
 consistent with the bigger picture without restating it. Freeform — a starting scaffold, not a
 schema; discard sections that don't apply.
 
@@ -46,14 +46,14 @@ schema; discard sections that don't apply.
 
 export async function init() {
   const root = findProjectRoot();
-  const ledger = ledgerRoot();
+  const journal = journalRoot();
 
   if (fs.existsSync(styleFile())) {
-    console.log(`${LEDGER_DIRNAME}/ already initialized at ${ledger}.`);
+    console.log(`${JOURNAL_DIRNAME}/ already initialized at ${journal}.`);
     return;
   }
 
-  fs.mkdirSync(path.join(ledger, 'features'), { recursive: true });
+  fs.mkdirSync(path.join(journal, 'features'), { recursive: true });
   fs.mkdirSync(fragmentsDir(), { recursive: true });
   fs.writeFileSync(styleFile(), STYLE_STUB, 'utf8');
   fs.writeFileSync(architectureFile(), ARCHITECTURE_STUB, 'utf8');
@@ -66,12 +66,12 @@ export async function init() {
     path.relative(root, architectureFile()),
   ];
 
-  const sha = stageAndCommit(relPaths, 'chore(ledger): initialize LEDGER');
-  console.log(`Initialized ${LEDGER_DIRNAME}/ at ${ledger}`);
+  const sha = stageAndCommit(relPaths, 'chore(journal): initialize JOURNAL');
+  console.log(`Initialized ${JOURNAL_DIRNAME}/ at ${journal}`);
   console.log(`Committed ${sha.slice(0, 12)}`);
 
   await buildDashboard();
 
-  console.log(`\nNext: ledger list-features "<brain dump of your project>"`);
-  console.log(`(or, for an existing codebase: ledger ledger-init)`);
+  console.log(`\nNext: journal list-features "<brain dump of your project>"`);
+  console.log(`(or, for an existing codebase: journal journal-init)`);
 }

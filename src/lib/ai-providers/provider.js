@@ -33,7 +33,7 @@ export function saveConfig(config) {
 let cached;
 
 /**
- * Resolves the single, project-wide AIProvider, per LEDGER/config.json's
+ * Resolves the single, project-wide AIProvider, per JOURNAL/config.json's
  * "aiProvider" field. Provider choice is global, not configurable per
  * command/step (spec §10) — every AI-assisted command goes through this.
  */
@@ -43,7 +43,7 @@ export function getProvider() {
   const factory = PROVIDERS[aiProvider];
   if (!factory) {
     throw new Error(
-      `Unknown aiProvider "${aiProvider}" in LEDGER/config.json. Available: ${Object.keys(PROVIDERS).join(', ')}`
+      `Unknown aiProvider "${aiProvider}" in JOURNAL/config.json. Available: ${Object.keys(PROVIDERS).join(', ')}`
     );
   }
   cached = factory();
