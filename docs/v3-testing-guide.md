@@ -151,7 +151,7 @@ journal build-dashboard
 - `JOURNAL/features/<feature>/errors/diagnosis.md` — append-only output of `fix-error`.
 
 Full command reference + design rationale: `README.md` and `docs/JOURNAL-spec.md` in
-*this* repo (The-Notes-Method), not the project you're testing in.
+*this* repo (journal), not the project you're testing in.
 
 ## 6. Logging feedback
 
