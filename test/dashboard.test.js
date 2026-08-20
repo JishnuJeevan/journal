@@ -26,7 +26,10 @@ test('transforms versions/steps into the template shape, with fileUrl only on th
   ];
   index.features['auth'] = entry;
 
-  const data = buildDashboardData(index, { relFromLedger: () => 'features/auth/logic/logic.md' });
+  // Mimics the real relFromLedger contract: only resolves a local file for the
+  // current version (no per-version archive available in this test).
+  const relFromLedger = (slug, step, version, isCurrent) => (isCurrent ? 'features/auth/logic/logic.md' : null);
+  const data = buildDashboardData(index, { relFromLedger });
   const f = data.features.find((f) => f.slug === 'auth');
 
   assert.equal(f.group, 'authentication');
@@ -40,13 +43,44 @@ test('transforms versions/steps into the template shape, with fileUrl only on th
 
   assert.equal(v1.stepData.logic.attribution, 'person');
   assert.equal(v1.stepData.logic.sha, 'abc123def456');
-  assert.equal(v1.stepData.logic.fileUrl, null); // historical — no link
+  assert.equal(v1.stepData.logic.fileUrl, null); // historical — no local link
+  assert.equal(v1.stepData.logic.historicalHint, 'git show abc123def456:LEDGER/features/auth/logic/logic.md');
 
   assert.equal(v2.stepData.logic.attribution, 'ai');
   assert.equal(v2.stepData.logic.fileUrl, 'features/auth/logic/logic.md'); // current — linked
+  assert.equal(v2.stepData.logic.historicalHint, null); // current — no hint needed
 
   assert.equal(v2.stepData.code.attribution, null); // registered step, no record yet
   assert.equal(v2.stepData.code.fileUrl, null);
+});
+
+test('carries identity, libraries, and dependsOn through to the template shape', () => {
+  const index = createEmptyIndex();
+  const entry = newFeatureEntry({ name: 'Auth', description: 'Login.' });
+  entry.libraries = ['bcrypt', 'express-session'];
+  entry.dependsOn = ['session-management'];
+  entry.steps = ['logic'];
+  entry.currentVersion = 1;
+  entry.versions = [
+    { version: 1, steps: { logic: { attribution: 'ai', identity: 'claude-sonnet-4-6', commitSha: 'abc123', date: '2026-08-17' } } },
+  ];
+  index.features['auth'] = entry;
+
+  const data = buildDashboardData(index);
+  const f = data.features.find((f) => f.slug === 'auth');
+
+  assert.deepEqual(f.libraries, ['bcrypt', 'express-session']);
+  assert.deepEqual(f.dependsOn, ['session-management']);
+  assert.equal(f.versions[0].stepData.logic.identity, 'claude-sonnet-4-6');
+});
+
+test('orders features by their `order` field', () => {
+  const index = createEmptyIndex();
+  index.features['second'] = newFeatureEntry({ name: 'Second', description: '.', order: 1 });
+  index.features['first'] = newFeatureEntry({ name: 'First', description: '.', order: 0 });
+
+  const data = buildDashboardData(index);
+  assert.deepEqual(data.features.map((f) => f.slug), ['first', 'second']);
 });
 
 test('carries errors through untouched, keyed by slug', () => {

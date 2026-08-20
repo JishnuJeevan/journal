@@ -4,15 +4,17 @@ import { execSync } from 'node:child_process';
 import prompts from 'prompts';
 import {
   findProjectRoot, stepFile, stepDir, brainDumpFile, sketchFile, codeAnnotationsFile,
-  testOutlineFile, testFile, indexFile,
+  testOutlineFile, testFile, fragmentFile, configFile,
 } from '../lib/paths.js';
-import { loadIndex, saveIndex, getFeature, getCurrentVersion } from '../lib/index-store.js';
-import { stageAndCommit } from '../lib/git.js';
+import { loadFeature, saveFeature, getCurrentVersion, listFeatureSlugs, loadAllFeatures } from '../lib/index-store.js';
+import { stageAndCommit, commitAuthorName } from '../lib/git.js';
 import { readStepFile, writeStepFile } from '../lib/frontmatter.js';
 import { hasContent, appendNote } from '../lib/templates.js';
 import { contentHash, hashOfFiles } from '../lib/hash.js';
 import { loadConfig, saveConfig } from '../lib/ai-providers/provider.js';
 import { checkLogicIntegrity } from '../lib/logicIntegrity.js';
+import { extractDependsOn } from '../lib/dependencies.js';
+import { scanImportsInFiles, externalLibraries, resolveRelativeImport, pathBelongsToCodePaths } from '../lib/imports.js';
 import { buildDashboard } from './buildDashboard.js';
 
 function todayIso() {
@@ -123,10 +125,37 @@ async function driftCheck({ upstreamFile, upstreamLabel }) {
   return false;
 }
 
+/** §4.8 self-report safety net: flag an import that resolves into another feature's
+ * codePaths but wasn't named in this feature's `depends-on:` line. Non-blocking. */
+function checkMissedDependencies(feature, entry, root, realCodeFiles) {
+  const allFeatures = loadAllFeatures();
+  const declared = new Set(entry.dependsOn || []);
+  const missed = new Set();
+
+  for (const file of realCodeFiles) {
+    const specs = scanImportsInFiles(root, [file]);
+    for (const spec of specs) {
+      const resolved = resolveRelativeImport(root, file, spec);
+      if (!resolved) continue;
+      for (const [otherSlug, otherEntry] of Object.entries(allFeatures)) {
+        if (otherSlug === feature || declared.has(otherSlug)) continue;
+        if (pathBelongsToCodePaths(resolved, otherEntry.codePaths)) missed.add(otherSlug);
+      }
+    }
+  }
+
+  if (missed.size > 0) {
+    console.log(
+      `\nNote: this code imports from feature(s) not declared in ${feature}'s Logic (\`depends-on:\`): ` +
+        `${[...missed].join(', ')}. Not blocking — but if real, add a \`depends-on:\` line to Logic and ` +
+        `run \`ledger new-version ${feature}\` to record it properly.`
+    );
+  }
+}
+
 export async function commitStep(step, feature, opts = {}) {
   const root = findProjectRoot();
-  const index = loadIndex();
-  const entry = getFeature(index, feature);
+  const entry = loadFeature(feature);
   requireStepInPipeline(entry, feature, step);
   checkLogicIntegrity(feature, entry);
   const version = getCurrentVersion(entry);
@@ -140,19 +169,28 @@ export async function commitStep(step, feature, opts = {}) {
 
   const date = todayIso();
   let contentRelPaths = [];
+  let libraries = null;
+  let realCodeFiles = null;
 
   if (step === 'code') {
     if (!fs.existsSync(stepDir(feature, 'code'))) fs.mkdirSync(stepDir(feature, 'code'), { recursive: true });
     const codePaths = await resolveCodePaths(entry, root, opts);
     const snapshotRelPaths = syncCodeSnapshot(feature, root, codePaths);
     contentRelPaths.push(...snapshotRelPaths);
+    realCodeFiles = [];
     for (const relPath of codePaths) {
-      contentRelPaths.push(...collectFilesUnder(root, path.join(root, relPath)));
+      realCodeFiles.push(...collectFilesUnder(root, path.join(root, relPath)));
     }
+    contentRelPaths.push(...realCodeFiles);
     const ann = relIfExists(root, codeAnnotationsFile(feature));
     if (ann) contentRelPaths.push(ann);
     const sk = relIfExists(root, sketchFile(feature));
     if (sk) contentRelPaths.push(sk);
+
+    // §6.2: external packages referenced, auto-extracted — not to be confused with
+    // §4.8's dependsOn (feature-to-feature, not feature-to-package).
+    const specs = scanImportsInFiles(root, realCodeFiles);
+    libraries = externalLibraries(specs);
   } else if (step === 'test') {
     if (!version.steps.test?.generatedHash) {
       throw new Error(`No generated test content yet for "${feature}" — run \`ledger draft test ${feature}\` (both phases) first.`);
@@ -169,6 +207,7 @@ export async function commitStep(step, feature, opts = {}) {
       if (!cmd || !cmd.trim()) throw new Error('Cancelled — commit test needs a test command to verify automated tests pass.');
       testCommand = cmd.trim();
       saveConfig({ ...config, testCommand });
+      contentRelPaths.push(path.relative(root, configFile()));
     }
 
     console.log(`Running: ${testCommand}`);
@@ -179,11 +218,21 @@ export async function commitStep(step, feature, opts = {}) {
     }
 
     const tFile = testFile(feature);
-    const tContent = fs.existsSync(tFile) ? fs.readFileSync(tFile, 'utf8') : '';
+    let tContent = fs.existsSync(tFile) ? fs.readFileSync(tFile, 'utf8') : '';
     const manualSection = tContent.split(/^## Manual/m)[1] || '';
     if (/-\s\[ \]/.test(manualSection)) {
-      throw new Error(`Unchecked manual checklist items remain in ${tFile} — check them off (or remove them) before committing test.`);
+      throw new Error(`Unchecked manual checklist items remain in ${tFile} — check them off (with a note on what you verified) before committing test.`);
     }
+
+    // Feedback: stamp that the automated section was actually verified, and against
+    // what command — not just that a draft exists. Re-baseline generatedHash against
+    // this stamped content so the post-commit drift check doesn't flag its own stamp.
+    const stampLine = `**Verified passing:** ${date} via \`${testCommand}\` (\`ledger commit test\`)\n\n`;
+    if (!tContent.includes('**Verified passing:**')) {
+      tContent = tContent.replace(/^(# Test — .+\n\n)/m, `$1${stampLine}`);
+      fs.writeFileSync(tFile, tContent, 'utf8');
+    }
+    version.steps.test.generatedHash = contentHash(tContent);
 
     contentRelPaths.push(path.relative(root, tFile));
     const realTestPath = version.steps.test.testFilePath;
@@ -211,11 +260,30 @@ export async function commitStep(step, feature, opts = {}) {
     writeStepFile(file, { ...parsed.data, attribution, version: version.version, date, commit_sha: null }, parsed.content);
   }
 
+  // §4.8: extract declared feature dependencies from committed Logic itself.
+  if (step === 'logic') {
+    const logicBody = readStepFile(stepFile(feature, 'logic')).content;
+    const declared = extractDependsOn(logicBody);
+    const known = new Set(listFeatureSlugs());
+    const unknown = declared.filter((slug) => slug !== feature && !known.has(slug));
+    if (unknown.length) {
+      console.log(`Note: depends-on names unrecognized feature(s): ${unknown.join(', ')} (stored as declared anyway — check for typos).`);
+    }
+    entry.dependsOn = declared.filter((slug) => slug !== feature);
+  }
+
   const dedupedContentPaths = Array.from(new Set(contentRelPaths));
   const contentSha = stageAndCommit(
     dedupedContentPaths,
     `${feature}: commit ${step} (version ${version.version}, ${attribution})`
   );
+
+  // §5: specific identity, captured automatically — git author name off the commit
+  // just made (person), or the model that produced the draft (ai), never self-reported.
+  const identity =
+    attribution === 'person' ? commitAuthorName(contentSha)
+    : attribution === 'ai' ? (version.steps[step]?.aiModel || null)
+    : null;
 
   try {
     let committedHash;
@@ -229,30 +297,36 @@ export async function commitStep(step, feature, opts = {}) {
     version.steps[step] = {
       ...(version.steps[step] || {}),
       attribution,
+      identity,
       commitSha: contentSha,
       date,
       ...(committedHash ? { committedHash } : {}),
     };
-    saveIndex(index);
+    if (step === 'code' && libraries) entry.libraries = libraries;
+    saveFeature(feature, entry);
 
-    const recordRelPaths = [path.relative(root, indexFile())];
+    const recordRelPaths = [path.relative(root, fragmentFile(feature))];
     if (step !== 'code' && step !== 'test') recordRelPaths.push(path.relative(root, stepFile(feature, step)));
     const recordSha = stageAndCommit(
       recordRelPaths,
       `chore(ledger): record ${feature} ${step} version ${version.version} SHA (${contentSha.slice(0, 12)})`
     );
 
-    console.log(`Committed ${step} for "${feature}" (${attribution}): ${contentSha.slice(0, 12)}`);
-    console.log(`Recorded in LEDGER/index.json: ${recordSha.slice(0, 12)}`);
+    console.log(`Committed ${step} for "${feature}" (${attribution}${identity ? ` · ${identity}` : ''}): ${contentSha.slice(0, 12)}`);
+    console.log(`Recorded in LEDGER/index-fragments/${feature}.json: ${recordSha.slice(0, 12)}`);
   } catch (err) {
     console.error(
-      `\nCONTENT WAS COMMITTED (${contentSha}) but recording it into LEDGER/index.json failed:\n` +
+      `\nCONTENT WAS COMMITTED (${contentSha}) but recording it into LEDGER/index-fragments/${feature}.json failed:\n` +
         `  ${err.message}\n\n` +
         `The dashboard will be out of sync until this is fixed. Options:\n` +
         `  - Fix whatever failed and re-run \`ledger commit ${step} ${feature}\`\n` +
-        `  - Or manually edit LEDGER/index.json and commit it yourself.`
+        `  - Or manually edit LEDGER/index-fragments/${feature}.json and commit it yourself.`
     );
     throw err;
+  }
+
+  if (step === 'code' && realCodeFiles && realCodeFiles.length) {
+    checkMissedDependencies(feature, entry, root, realCodeFiles);
   }
 
   // Friction fix: never let the dashboard go stale after a commit. Runs before the

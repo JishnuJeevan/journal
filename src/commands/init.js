@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { findProjectRoot, ledgerRoot, indexFile, configFile, styleFile, architectureFile, LEDGER_DIRNAME } from '../lib/paths.js';
-import { createEmptyIndex, saveIndex } from '../lib/index-store.js';
+import { findProjectRoot, ledgerRoot, fragmentsDir, configFile, styleFile, architectureFile, LEDGER_DIRNAME } from '../lib/paths.js';
 import { stageAndCommit } from '../lib/git.js';
 import { saveConfig, DEFAULT_PROVIDER } from '../lib/ai-providers/provider.js';
+import { buildDashboard } from './buildDashboard.js';
 
 const STYLE_STUB = `# Global style & testing preferences
 
@@ -48,20 +48,19 @@ export async function init() {
   const root = findProjectRoot();
   const ledger = ledgerRoot();
 
-  if (fs.existsSync(indexFile())) {
+  if (fs.existsSync(styleFile())) {
     console.log(`${LEDGER_DIRNAME}/ already initialized at ${ledger}.`);
     return;
   }
 
   fs.mkdirSync(path.join(ledger, 'features'), { recursive: true });
+  fs.mkdirSync(fragmentsDir(), { recursive: true });
   fs.writeFileSync(styleFile(), STYLE_STUB, 'utf8');
   fs.writeFileSync(architectureFile(), ARCHITECTURE_STUB, 'utf8');
 
-  saveIndex(createEmptyIndex());
-  saveConfig({ aiProvider: DEFAULT_PROVIDER, testCommand: null });
+  saveConfig({ aiProvider: DEFAULT_PROVIDER, testCommand: null, aiModel: null });
 
   const relPaths = [
-    path.relative(root, indexFile()),
     path.relative(root, configFile()),
     path.relative(root, styleFile()),
     path.relative(root, architectureFile()),
@@ -70,6 +69,9 @@ export async function init() {
   const sha = stageAndCommit(relPaths, 'chore(ledger): initialize LEDGER');
   console.log(`Initialized ${LEDGER_DIRNAME}/ at ${ledger}`);
   console.log(`Committed ${sha.slice(0, 12)}`);
+
+  await buildDashboard();
+
   console.log(`\nNext: ledger list-features "<brain dump of your project>"`);
   console.log(`(or, for an existing codebase: ledger ledger-init)`);
 }

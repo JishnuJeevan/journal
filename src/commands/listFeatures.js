@@ -1,10 +1,10 @@
 import path from 'node:path';
 import prompts from 'prompts';
-import { findProjectRoot } from '../lib/paths.js';
-import { loadIndex, saveIndex, newFeatureEntry } from '../lib/index-store.js';
-import { indexFile } from '../lib/paths.js';
+import { findProjectRoot, fragmentFile } from '../lib/paths.js';
+import { featureExists, saveFeature, newFeatureEntry, nextOrder } from '../lib/index-store.js';
 import { stageAndCommit } from '../lib/git.js';
 import { proposeFeatures } from '../lib/ai.js';
+import { buildDashboard } from './buildDashboard.js';
 
 export async function listFeatures(brainDump) {
   if (!brainDump || !brainDump.trim()) {
@@ -14,22 +14,20 @@ export async function listFeatures(brainDump) {
   console.log('Asking Claude to propose features from your description...\n');
   const proposed = await proposeFeatures(brainDump);
 
-  const index = loadIndex();
-  const known = new Set(Object.keys(index.features));
-
+  // Features start ungrouped — group manually via `set-group` once you've actually
+  // registered enough of them to see how they cluster (feedback: auto-grouping at
+  // proposal time was premature and not what the author wanted by default).
   const choices = proposed.map((f) => ({
-    title: `${f.name}${known.has(f.slug) ? ' (already registered)' : ''}`,
-    description: `${f.slug} — ${f.description}${f.group ? ` [${f.group}]` : ''}`,
+    title: `${f.name}${featureExists(f.slug) ? ' (already registered)' : ''}`,
+    description: `${f.slug} — ${f.description}`,
     value: f,
-    selected: !known.has(f.slug),
-    disabled: known.has(f.slug),
+    selected: !featureExists(f.slug),
+    disabled: featureExists(f.slug),
   }));
 
-  console.log('Proposed features:');
+  console.log('Proposed features (ordered simplest to hardest to implement):');
   for (const f of proposed) {
-    console.log(
-      `  - ${f.slug}: ${f.description}${f.group ? ` (group: ${f.group})` : ''}${known.has(f.slug) ? '  [already registered]' : ''}`
-    );
+    console.log(`  - ${f.slug}: ${f.description}${featureExists(f.slug) ? '  [already registered]' : ''}`);
   }
   console.log('');
 
@@ -46,17 +44,21 @@ export async function listFeatures(brainDump) {
     return;
   }
 
-  for (const f of selected) {
-    index.features[f.slug] = newFeatureEntry({ name: f.name, description: f.description, group: f.group ?? null });
-  }
-  saveIndex(index);
-
   const root = findProjectRoot();
-  const sha = stageAndCommit(
-    [path.relative(root, indexFile())],
-    `chore(ledger): register features (${selected.map((f) => f.slug).join(', ')})`
-  );
+  const relPaths = [];
+  let order = nextOrder();
+  // Registered in the AI's proposed (simplest-to-hardest) order, so `order` reflects
+  // implementation sequence rather than selection order.
+  for (const f of proposed) {
+    if (!selected.includes(f)) continue;
+    const entry = newFeatureEntry({ name: f.name, description: f.description, group: null, order: order++ });
+    saveFeature(f.slug, entry);
+    relPaths.push(path.relative(root, fragmentFile(f.slug)));
+  }
+
+  const sha = stageAndCommit(relPaths, `chore(ledger): register features (${selected.map((f) => f.slug).join(', ')})`);
 
   console.log(`\nRegistered ${selected.length} feature(s). Committed ${sha.slice(0, 12)}.`);
+  await buildDashboard();
   console.log(`Next: ledger list-steps <feature> for each, to lock in its step pipeline.`);
 }

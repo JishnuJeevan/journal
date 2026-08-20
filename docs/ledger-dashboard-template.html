@@ -79,14 +79,20 @@
   <p class="generated" id="generatedNote"></p>
 
   <div class="toolbar">
-    <input type="text" id="search" placeholder="Search features...">
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <input type="text" id="search" placeholder="Search features...">
+      <div id="viewToggle" style="display:flex; border:1px solid var(--border); border-radius:6px; overflow:hidden;">
+        <button id="viewList" style="border:none; padding:0.35rem 0.7rem; font-size:0.8rem; cursor:pointer; background:var(--accent-bg); color:var(--accent-fg);">List</button>
+        <button id="viewGraph" style="border:none; padding:0.35rem 0.7rem; font-size:0.8rem; cursor:pointer; background:var(--bg); color:var(--fg);">Graph</button>
+      </div>
+    </div>
     <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
-      <div class="legend">
+      <div class="legend" id="legendRow">
         <span><span class="dot" style="background:var(--person)"></span>person</span>
         <span><span class="dot" style="background:var(--ai)"></span>ai</span>
         <span><span class="dot" style="background:var(--none)"></span>not set</span>
       </div>
-      <label><input type="checkbox" id="showRemoved"> Show removed</label>
+      <label id="showRemovedLabel"><input type="checkbox" id="showRemoved"> Show removed</label>
     </div>
   </div>
 
@@ -112,10 +118,16 @@
          group: string | null,           // null -> shown under "Ungrouped"
          removed: boolean,
          codePaths: string[],            // real relative paths, rendered as links
+         libraries: string[],            // external packages used, auto-extracted from
+                                          // import/require statements at commit-code time
+                                          // (§6.2) — not the same as dependsOn (§4.8),
+                                          // which is feature-to-feature, not feature-to-package
          steps: string[],                // ordered pipeline for this feature,
                                           // e.g. ["logic","code","test","document"]
                                           // or with a custom step appended
          pipelineSet: boolean,           // false -> "pipeline not set" shown, no steps grid
+         dependsOn: string[],            // slugs of features this one declares depending
+                                          // on (§4.8) — feeds the Graph view. [] if none.
          versions: [
            {
              version: number,
@@ -124,6 +136,11 @@
                // key = step name from `steps` above
                logic: {
                  attribution: "person" | "ai" | "legacy" | null,  // null -> "not set"
+                 identity: string | string[] | null,  // person: git author name(s), incl.
+                                                        // co-authors; ai: model/provider id
+                                                        // (e.g. "claude-sonnet-4-6"); null for
+                                                        // legacy or not-set. Shown as text next
+                                                        // to the dot, not a separate color.
                  sha: string | null,
                  date: string | null,
                  fileUrl: string | null   // relative path/link to the real file for this version
@@ -141,7 +158,8 @@
              description: string,           // the error/output as logged
              fixNote: string | null,        // null while still open
              resolvedDate: string | null,
-             attribution: "person" | "ai" | null   // who ran resolve-error; null while open
+             attribution: "person" | "ai" | null,   // who ran resolve-error; null while open
+             identity: string | string[] | null     // same identity convention as steps
            }
            // omit entirely or leave [] for a feature with no logged errors —
            // the Errors toggle is only rendered when this array is non-empty
@@ -164,25 +182,27 @@ const LEDGER_DATA = {
       group: "authentication",
       removed: false,
       codePaths: ["src/auth/login.js", "src/auth/session.js"],
+      libraries: ["bcrypt", "express-session"],
+      dependsOn: [],
       steps: ["logic", "code", "test", "document"],
       pipelineSet: true,
       versions: [
         {
           version: 1, current: false,
           stepData: {
-            logic: { attribution: "ai", sha: "0ff6a67", date: "2026-08-10", fileUrl: "LEDGER/features/user-login/logic/logic.md" },
-            code: { attribution: "ai", sha: "3009b59", date: "2026-08-10", fileUrl: "LEDGER/features/user-login/code/" },
-            test: { attribution: "person", sha: "932bc8c", date: "2026-08-10", fileUrl: "LEDGER/features/user-login/test/test.md" },
-            document: { attribution: "ai", sha: "5536251", date: "2026-08-10", fileUrl: "LEDGER/features/user-login/document/document.md" }
+            logic: { attribution: "ai", identity: "claude-sonnet-4-6", sha: "0ff6a67", date: "2026-08-10", fileUrl: "LEDGER/features/user-login/logic/logic.md" },
+            code: { attribution: "ai", identity: "claude-sonnet-4-6", sha: "3009b59", date: "2026-08-10", fileUrl: "LEDGER/features/user-login/code/" },
+            test: { attribution: "person", identity: "Alice Chen", sha: "932bc8c", date: "2026-08-10", fileUrl: "LEDGER/features/user-login/test/test.md" },
+            document: { attribution: "ai", identity: "claude-sonnet-4-6", sha: "5536251", date: "2026-08-10", fileUrl: "LEDGER/features/user-login/document/document.md" }
           }
         },
         {
           version: 2, current: true,
           stepData: {
-            logic: { attribution: "person", sha: "a1b2c3d", date: "2026-08-17", fileUrl: "LEDGER/features/user-login/logic/logic.md" },
-            code: { attribution: "person", sha: "e4f5a6b", date: "2026-08-17", fileUrl: "LEDGER/features/user-login/code/" },
-            test: { attribution: "person", sha: "c7d8e9f", date: "2026-08-17", fileUrl: "LEDGER/features/user-login/test/test.md" },
-            document: { attribution: null, sha: null, date: null, fileUrl: null }
+            logic: { attribution: "person", identity: "Alice Chen", sha: "a1b2c3d", date: "2026-08-17", fileUrl: "LEDGER/features/user-login/logic/logic.md" },
+            code: { attribution: "person", identity: ["Alice Chen", "Bilal Rana"], sha: "e4f5a6b", date: "2026-08-17", fileUrl: "LEDGER/features/user-login/code/" },
+            test: { attribution: "person", identity: "Bilal Rana", sha: "c7d8e9f", date: "2026-08-17", fileUrl: "LEDGER/features/user-login/test/test.md" },
+            document: { attribution: null, identity: null, sha: null, date: null, fileUrl: null }
           }
         }
       ],
@@ -193,7 +213,8 @@ const LEDGER_DATA = {
           description: "TypeError: Cannot read properties of undefined (reading 'token')\n  at validateSession (session.js:18)",
           fixNote: "validateSession assumed a session always exists; added a check for the logged-out case.",
           resolvedDate: "2026-08-16",
-          attribution: "person"
+          attribution: "person",
+          identity: "Alice Chen"
         },
         {
           id: 2, status: "open",
@@ -213,6 +234,7 @@ const LEDGER_DATA = {
       group: "authentication",
       removed: false,
       codePaths: [],
+      dependsOn: ["user-login"],
       steps: [],
       pipelineSet: false,
       versions: []
@@ -225,6 +247,7 @@ const LEDGER_DATA = {
       group: null,
       removed: false,
       codePaths: ["src/export/csvBuilder.js"],
+      dependsOn: [],
       steps: ["logic", "code", "test", "document"],
       pipelineSet: true,
       versions: [
@@ -255,6 +278,26 @@ const LEDGER_DATA = {
           code: { attribution: "ai", sha: "1a2b3c4", date: "2026-08-01", fileUrl: "LEDGER/features/legacy-report-generator/code/" }
         }}
       ]
+    },
+    {
+      // Demonstrates: integration pseudo-feature (§4.7) — no "code" in steps,
+      // so it's auto-routed into the "Integration Tests" section rather than
+      // its group, with no self-reported tag needed.
+      slug: "login-session-integration",
+      name: "Login \u2192 session integration",
+      description: "Verifies that after login succeeds, session state reflects logged-in status.",
+      group: "authentication",
+      removed: false,
+      codePaths: [],
+      dependsOn: ["user-login"],
+      steps: ["logic", "test"],
+      pipelineSet: true,
+      versions: [
+        { version: 1, current: true, stepData: {
+          logic: { attribution: "person", sha: "2c4d6e8", date: "2026-08-17", fileUrl: "LEDGER/features/login-session-integration/logic/logic.md" },
+          test: { attribution: "person", sha: "8a1b3c5", date: "2026-08-17", fileUrl: "LEDGER/features/login-session-integration/test/test.md" }
+        }}
+      ]
     }
   ]
 };
@@ -279,6 +322,12 @@ function stepCountLabel(feature) {
   return done + " / " + feature.steps.length + " steps · v" + v.version;
 }
 
+function identityLabel(sd) {
+  if (!sd.attribution) return "";
+  const who = Array.isArray(sd.identity) ? sd.identity.join(", ") : sd.identity;
+  return sd.attribution + (who ? " · " + who : "");
+}
+
 function renderStepGrid(feature, version) {
   if (!feature.pipelineSet) {
     return '<p class="no-pipeline">Step pipeline not yet locked in — run <code>ledger list-steps ' + feature.slug + '</code>.</p>';
@@ -287,9 +336,10 @@ function renderStepGrid(feature, version) {
     const sd = (version && version.stepData[step]) || {};
     const color = sd.attribution ? DOT_COLOR[sd.attribution] : DOT_COLOR.none;
     const inner = '<span>' + STEP_LABEL(step) + '</span><span class="step-dot" style="background:' + color + '"></span>';
+    const title = identityLabel(sd) ? ' title="' + identityLabel(sd) + '"' : "";
     return sd.fileUrl
-      ? '<a class="step-btn" href="' + sd.fileUrl + '">' + inner + '</a>'
-      : '<span class="step-btn" style="opacity:0.6; cursor:default;">' + inner + '</span>';
+      ? '<a class="step-btn" href="' + sd.fileUrl + '"' + title + '>' + inner + '</a>'
+      : '<span class="step-btn" style="opacity:0.6; cursor:default;"' + title + '>' + inner + '</span>';
   }).join("");
   return '<div class="step-grid">' + cells + '</div>';
 }
@@ -314,7 +364,7 @@ function renderErrorsSection(feature) {
       ? '<span class="status-open">Open</span>'
       : '<span class="status-resolved">Resolved</span>';
     const fixHtml = e.status === "resolved"
-      ? '<p class="fix"><span class="fix-dot" style="background:' + (DOT_COLOR[e.attribution] || DOT_COLOR.none) + '"></span>' + e.fixNote + '</p>'
+      ? '<p class="fix"><span class="fix-dot" style="background:' + (DOT_COLOR[e.attribution] || DOT_COLOR.none) + '"></span>' + e.fixNote + (identityLabel(e) ? ' <span style="color:var(--muted);">(' + identityLabel(e) + ')</span>' : '') + '</p>'
       : '<p class="fix" style="font-style:italic;">Not yet resolved.</p>';
     return (
       '<div class="error-entry">' +
@@ -338,6 +388,9 @@ function renderFeature(feature) {
   const paths = feature.codePaths.length
     ? '<p class="paths">' + feature.codePaths.map(p => '<a href="' + p + '">' + p + '</a>').join(' <span style="color:var(--border)">·</span> ') + '</p>'
     : "";
+  const libraries = (feature.libraries || []).length
+    ? '<p class="paths" style="margin-top:2px;">Libraries: ' + feature.libraries.join(", ") + '</p>'
+    : "";
   return (
     '<div class="feature' + (feature.removed ? ' removed' : '') + '" data-slug="' + feature.slug + '" data-search="' + (feature.name + " " + feature.slug + " " + feature.description).toLowerCase() + '">' +
       '<div class="feature-head">' +
@@ -348,8 +401,55 @@ function renderFeature(feature) {
       renderVersionChips(feature) +
       renderStepGrid(feature, v) +
       paths +
+      libraries +
       renderErrorsSection(feature) +
     '</div>'
+  );
+}
+
+function renderGraph(data) {
+  const features = data.features.filter(f => !f.removed);
+  const size = 560, cx = size / 2, cy = size / 2, radius = size / 2 - 70;
+  const n = features.length;
+  const positioned = features.map((f, i) => {
+    const angle = (2 * Math.PI * i) / n - Math.PI / 2;
+    return Object.assign({}, f, { x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) });
+  });
+  const posBySlug = {};
+  positioned.forEach(p => { posBySlug[p.slug] = p; });
+
+  let edgesSvg = "";
+  positioned.forEach(f => {
+    (f.dependsOn || []).forEach(depSlug => {
+      const target = posBySlug[depSlug];
+      if (!target) return;
+      edgesSvg += '<line x1="' + f.x + '" y1="' + f.y + '" x2="' + target.x + '" y2="' + target.y +
+        '" stroke="#3b82f6" stroke-width="1.5" opacity="0.7" marker-end="url(#arrow)"></line>';
+    });
+  });
+
+  const nodesSvg = positioned.map(f => {
+    const isIntegration = f.pipelineSet && Array.isArray(f.steps) && !f.steps.includes("code");
+    const fill = isIntegration ? "var(--none)" : "var(--card)";
+    const label = f.name.length > 14 ? f.name.slice(0, 13) + "…" : f.name;
+    return (
+      '<g>' +
+        '<circle cx="' + f.x + '" cy="' + f.y + '" r="28" style="fill:' + fill + '; stroke:var(--border); stroke-width:1;"></circle>' +
+        '<text x="' + f.x + '" y="' + (f.y + 4) + '" text-anchor="middle" font-size="9.5" style="fill:var(--fg);">' + label + '</text>' +
+      '</g>'
+    );
+  }).join("");
+
+  if (n === 0) {
+    return '<p class="empty-note">No features to graph yet.</p>';
+  }
+
+  return (
+    '<svg viewBox="0 0 ' + size + ' ' + size + '" style="width:100%; max-width:560px; display:block; margin:0 auto;">' +
+      '<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#3b82f6"></path></marker></defs>' +
+      edgesSvg + nodesSvg +
+    '</svg>' +
+    '<p style="text-align:center; font-size:0.78rem; color:var(--muted); margin-top:8px;">Arrows point from a feature to what it depends on. Gray nodes are integration-test pseudo-features (§4.7).</p>'
   );
 }
 
@@ -359,11 +459,20 @@ function renderDashboard(data) {
 
   const groups = {};
   data.features.forEach(f => {
-    const key = f.group || "Ungrouped";
+    // A feature with no "code" step is an integration-test pseudo-feature (§4.7) —
+    // detected from its declared step pipeline, not a self-reported tag.
+    const isIntegration = f.pipelineSet && Array.isArray(f.steps) && !f.steps.includes("code");
+    const key = isIntegration ? "Integration Tests" : (f.group || "Ungrouped");
     (groups[key] = groups[key] || []).push(f);
   });
 
-  const groupNames = Object.keys(groups).sort((a, b) => a === "Ungrouped" ? 1 : b === "Ungrouped" ? -1 : a.localeCompare(b));
+  const groupNames = Object.keys(groups).sort((a, b) => {
+    if (a === "Integration Tests") return 1;
+    if (b === "Integration Tests") return -1;
+    if (a === "Ungrouped") return 1;
+    if (b === "Ungrouped") return -1;
+    return a.localeCompare(b);
+  });
   const html = groupNames.map(g =>
     '<div class="group-label">' + g + '</div>' + groups[g].map(renderFeature).join("")
   ).join("");
@@ -422,7 +531,34 @@ function applyFilters() {
 document.getElementById("search").addEventListener("input", applyFilters);
 document.getElementById("showRemoved").addEventListener("change", applyFilters);
 
-renderDashboard(LEDGER_DATA);
+let currentView = "list";
+
+function setView(view) {
+  currentView = view;
+  const listBtn = document.getElementById("viewList");
+  const graphBtn = document.getElementById("viewGraph");
+  const activeStyle = "border:none; padding:0.35rem 0.7rem; font-size:0.8rem; cursor:pointer; background:var(--accent-bg); color:var(--accent-fg);";
+  const inactiveStyle = "border:none; padding:0.35rem 0.7rem; font-size:0.8rem; cursor:pointer; background:var(--bg); color:var(--fg);";
+  listBtn.style.cssText = view === "list" ? activeStyle : inactiveStyle;
+  graphBtn.style.cssText = view === "graph" ? activeStyle : inactiveStyle;
+
+  const isList = view === "list";
+  document.getElementById("search").style.display = isList ? "" : "none";
+  document.getElementById("showRemovedLabel").style.display = isList ? "" : "none";
+  document.getElementById("legendRow").style.display = isList ? "" : "none";
+  document.getElementById("emptyNote").style.display = "none";
+
+  if (isList) {
+    renderDashboard(LEDGER_DATA);
+  } else {
+    document.getElementById("app").innerHTML = renderGraph(LEDGER_DATA);
+  }
+}
+
+document.getElementById("viewList").addEventListener("click", () => setView("list"));
+document.getElementById("viewGraph").addEventListener("click", () => setView("graph"));
+
+setView("list");
 </script>
 </body>
 </html>

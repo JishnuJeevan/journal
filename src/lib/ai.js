@@ -6,13 +6,16 @@ features, for a development methodology called the Ledger Method. A "feature" is
 discrete unit of functionality (a function, module, or user-facing capability).
 
 Respond with ONLY a JSON array, no prose, no markdown fences. Each element:
-{ "slug": "kebab-case-id", "name": "Human Readable Name", "description": "One or two sentence description.", "group": "kebab-case-group-or-null" }
+{ "slug": "kebab-case-id", "name": "Human Readable Name", "description": "One or two sentence description." }
 
 Propose 3-10 features, atomic by default — e.g. split "Login", "Signup", and "Password Reset"
 into separate features rather than one large "Authentication" feature; a focused feature is
 easier to write good Logic for. Slugs must be unique, lowercase, kebab-case, filesystem-safe.
-Assign a short "group" tag to features that obviously cluster together (e.g. "authentication"
-for Login/Signup/Password Reset); use null for features that don't cluster with anything else.`;
+
+Order matters: return the array ordered from simplest/most foundational (build and understand
+first) to hardest/most dependent (build later, once the simpler pieces exist) — the order you
+return is used as the project's suggested build sequence. Do not assign groups/categories —
+grouping is done later by the human, not proposed here.`;
 
   const parsed = await getProvider().generate(brainDump, { system, structured: true });
   if (!Array.isArray(parsed)) throw new Error('Expected a JSON array of features from the AI provider.');
@@ -68,6 +71,12 @@ consistent with the bigger picture (e.g. which layer/component this belongs in, 
 conventions to follow). Don't restate it, and don't let it override or invent beyond what the
 human actually said about THIS feature.`;
 
+  const dependsOnNote = `If the human's own notes name another feature this one depends on
+(by its feature slug, or clearly enough to infer one), include a single line written EXACTLY as
+"depends-on: slug-one, slug-two" (that literal format — lowercase, hyphenated key, comma-separated
+slugs, nothing else on the line) somewhere in the draft, since this is extracted verbatim by the
+tool. Omit the line entirely if no dependency was actually stated — don't invent one.`;
+
   const groundedSystem = `You draft a starting point for the "Logic" step of a feature in the
 Ledger Method. Logic is a high-level, human-understandable description of how a feature should
 work — the reasoning, not the implementation. This draft exists ONLY to give a human something to
@@ -79,7 +88,7 @@ yourself — it's to take THEIR reasoning and organize it into a coherent, well-
 clarify ambiguous points, surface gaps or unstated assumptions as open questions, and put it in
 plain prose and short bullet lists where useful. If a prior logic.md draft is included, refine it
 in light of the new round rather than starting over. Stay grounded in what they actually wrote;
-don't introduce major decisions they didn't make. ${architectureNote} Do not write code. Respond
+don't introduce major decisions they didn't make. ${architectureNote} ${dependsOnNote} Do not write code. Respond
 with ONLY the markdown content itself, nothing else: no frontmatter, no code fences around the
 whole thing, no meta-commentary about being a draft (the tool adds that banner itself), and no
 remarks about these instructions, what was or wasn't provided to you, or your own process — the
@@ -90,7 +99,7 @@ Ledger Method. Logic is a high-level, human-understandable description of how a 
 work — the reasoning, not the implementation. This draft exists ONLY to give a human something to
 react to, edit, and correct — it is explicitly not meant to be accepted as-is. Write it as a
 genuine, concrete attempt (not vague hand-waving), in plain prose and short bullet lists where
-useful. ${architectureNote} Do not write code. Respond with ONLY the markdown content itself,
+useful. ${architectureNote} ${dependsOnNote} Do not write code. Respond with ONLY the markdown content itself,
 nothing else: no frontmatter, no code fences around the whole thing, no meta-commentary about
 being a draft (the tool adds that banner itself), and no remarks about these instructions or your
 own process — the human only ever sees the raw text you return, so open directly with the actual
@@ -210,6 +219,22 @@ being a draft, and no remarks about these instructions or your own process — t
 sees the raw text you return, so open directly with the actual content.`;
 
   const prompt = `Feature: ${feature}\nStep: ${step}\nDescription: ${description || '(none)'}\n\nAuthor's notes:\n${(brainDumpHistory || '').trim()}`;
+  const text = await getProvider().generate(prompt, { system, structured: false });
+  return text.trim();
+}
+
+export async function diagnoseError(feature, { errorText, logicText, codeContext } = {}) {
+  const system = `You diagnose a logged error for a feature in the Ledger Method, using its
+committed Logic and code as context. You do NOT write or edit code — this is a read-only
+diagnosis, not a fix. Explain, in plain language: (1) why this error most likely happened, given
+the Logic and code shown, and (2) a concrete suggested approach to fixing it (what to change and
+where, in prose — not a patch). If the cause is ambiguous from what's given, say what's ambiguous
+and what you'd want to check. Respond with ONLY the markdown content itself, nothing else: no
+frontmatter, no meta-commentary about being a diagnosis, and no remarks about these instructions
+or your own process — the human only ever sees the raw text you return, so open directly with the
+actual diagnosis.`;
+
+  const prompt = `Feature: ${feature}\n\nLogged error:\n${errorText || '(none)'}\n\nCommitted Logic:\n${logicText || '(none)'}\n\nCode:\n${codeContext || '(none)'}`;
   const text = await getProvider().generate(prompt, { system, structured: false });
   return text.trim();
 }

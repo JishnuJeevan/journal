@@ -13,6 +13,7 @@ import { commitStep } from './commands/commitStep.js';
 import { newVersion } from './commands/newVersion.js';
 import { logError } from './commands/logError.js';
 import { resolveError } from './commands/resolveError.js';
+import { fixError } from './commands/fixError.js';
 import { buildDashboard } from './commands/buildDashboard.js';
 
 function collect(value, previous) {
@@ -49,7 +50,7 @@ export function buildProgram() {
 
   program
     .command('list-features <brainDump>')
-    .description('Propose a feature list from a free-form project description (AI-assisted, human confirms)')
+    .description('Propose a feature list from a free-form project description (AI-assisted, human confirms). Ordered simplest-to-hardest; features start ungrouped — use set-group afterward.')
     .action(run(listFeatures));
 
   program
@@ -64,8 +65,8 @@ export function buildProgram() {
     .action(run((args) => setGroup(args)));
 
   program
-    .command('rename-group <oldName> <newName>')
-    .description('Retag every feature currently tagged <oldName> to <newName>')
+    .command('rename-group <oldName> [newName]')
+    .description('Retag every feature currently tagged <oldName> to <newName> — omit <newName> to ungroup them instead')
     .action(run(renameGroup));
 
   program
@@ -87,23 +88,30 @@ export function buildProgram() {
   program
     .command('draft <step> <feature> [description]')
     .description('AI drafts (or organizes your own notes into) content for a step — review and edit before committing')
-    .action(run((step, feature, description) => draftStep(step, feature, description)));
+    .option('--file', 'read from brain-dump.md/sketch.md directly instead of an inline description (for large input)')
+    .action(run((step, feature, description, opts) => draftStep(step, feature, description, opts)));
 
   program
     .command('commit <step> <feature>')
-    .description('Record attribution (auto-detected), commit the step, and record its SHA into LEDGER/index.json')
+    .description('Record attribution + identity (auto-detected), commit the step, and record it into LEDGER/index-fragments/<feature>.json')
     .option('--add-path <path>', 'link an additional code path (step "code" only, repeatable)', collect, [])
     .action(run((step, feature, opts) => commitStep(step, feature, opts)));
 
   program
     .command('new-version <feature>')
-    .description('Start a new revision pass for a feature — resets working files for its steps')
+    .description('Start a new revision pass for a feature — archives brain-dump/sketch/outline history and resets working files for its steps')
     .action(run(newVersion));
 
   program
-    .command('log-error <feature> [description]')
-    .description("Append an open entry to the feature's Errors log (pipe output in, or pass a description)")
+    .command('log-error <feature> [errorOutput] [description]')
+    .description("Append an open entry to the feature's Errors log — raw error/terminal output, and/or your own description of what happened. Pipe output in to fill errorOutput automatically.")
     .action(run(logError));
+
+  program
+    .command('fix-error <feature>')
+    .description("Diagnose a logged error (Logic + code as context) and append the diagnosis to errors/diagnosis.md — read-only, never edits code. Defaults to the most recent open error.")
+    .option('--id <n>', 'diagnose a specific error entry by id')
+    .action(run((feature, opts) => fixError(feature, opts)));
 
   program
     .command('resolve-error <feature> [fixNote]')
@@ -114,7 +122,7 @@ export function buildProgram() {
 
   program
     .command('build-dashboard')
-    .description('Regenerate LEDGER/index.html from LEDGER/index.json')
+    .description('Aggregate LEDGER/index-fragments/*.json into LEDGER/index.json and regenerate LEDGER/index.html')
     .action(run(buildDashboard));
 
   return program;

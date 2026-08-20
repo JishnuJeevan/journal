@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import matter from 'gray-matter';
 
 const STEP_STUBS = {
   logic: `<!--
@@ -41,6 +42,11 @@ export function newStepFrontmatter({ feature, step, version }) {
 }
 
 // --- Round-labeled append-only files (brain-dump.md, sketch.md) -----------
+//
+// These carry a small YAML frontmatter block (feature/step/version), the same
+// convention as the single-file steps (logic.md etc.) — visible at the top of
+// the file itself, per feedback, so it's obvious which version's rounds you're
+// looking at without cross-referencing the dashboard.
 
 function existingRoundNumbers(content) {
   const matches = [...content.matchAll(/^## Round (\d+)/gm)];
@@ -48,28 +54,60 @@ function existingRoundNumbers(content) {
 }
 
 /**
- * Appends `text` to `file` as a new `## Round N` section, creating the file
- * (and its parent dir) if needed. Never rewrites prior rounds — this is the
- * persistent-history mechanism shared by brain-dump.md and sketch.md.
+ * Creates `file` with frontmatter and an empty body if it doesn't already exist —
+ * a no-op otherwise. Called at step-registration time (list-steps/add-step) so
+ * brain-dump.md/sketch.md exist from the start, ready to write a large round into
+ * directly rather than only via a CLI string argument.
  */
-export function appendRound(file, text) {
+export function ensureRoundFile(file, { feature, step, version }) {
+  if (fs.existsSync(file)) return false;
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const existing = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
-  const nums = existingRoundNumbers(existing);
+  fs.writeFileSync(file, matter.stringify('', { feature, step, version }), 'utf8');
+  return true;
+}
+
+/**
+ * Appends `text` to `file` as a new `## Round N` section below any existing
+ * rounds, creating the file (and its parent dir, and frontmatter if `meta` is
+ * given) if needed. Never rewrites prior rounds — this is the persistent-history
+ * mechanism shared by brain-dump.md and sketch.md.
+ */
+export function appendRound(file, text, meta) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  let data = meta || {};
+  let existingBody = '';
+  if (fs.existsSync(file)) {
+    const parsed = matter(fs.readFileSync(file, 'utf8'));
+    data = { ...parsed.data, ...(meta || {}) };
+    existingBody = parsed.content;
+  }
+  const nums = existingRoundNumbers(existingBody);
   const next = nums.length ? Math.max(...nums) + 1 : 1;
-  const section = `## Round ${next}\n\n${text.trim()}\n\n`;
-  fs.writeFileSync(file, existing + section, 'utf8');
+  const newBody = `${existingBody}## Round ${next}\n\n${text.trim()}\n\n`;
+  fs.writeFileSync(file, matter.stringify(newBody, data), 'utf8');
   return next;
 }
 
-/** True if `file` exists and has any non-whitespace round content. */
+/** True if `file` exists and has any non-whitespace content below its frontmatter (if any). */
 export function hasContent(file) {
   if (!fs.existsSync(file)) return false;
-  return fs.readFileSync(file, 'utf8').trim().length > 0;
+  return matter(fs.readFileSync(file, 'utf8')).content.trim().length > 0;
 }
 
+/** Body content only — frontmatter (if any) stripped. A no-op parse for files with none. */
 export function readOrEmpty(file) {
-  return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+  if (!fs.existsSync(file)) return '';
+  return matter(fs.readFileSync(file, 'utf8')).content;
+}
+
+/** Archives `file` to `<name>.v<version>.md` alongside it, if it exists and has content — used by new-version (§4.1's "fresh start" for brain-dump.md/sketch.md, preserving rather than erasing prior rounds). */
+export function archiveRoundFile(file, version) {
+  if (!fs.existsSync(file)) return null;
+  const parsed = matter(fs.readFileSync(file, 'utf8'));
+  if (!parsed.content.trim()) return null; // nothing but frontmatter — nothing worth archiving
+  const archived = file.replace(/(\.md)$/, `.v${version}$1`);
+  fs.renameSync(file, archived);
+  return archived;
 }
 
 /** Appends a one-off labeled note (e.g. a drift-check answer) to a file. */

@@ -61,6 +61,10 @@ export function errorsFile(feature) {
   return path.join(featureDir(feature), 'errors', 'errors.md');
 }
 
+export function diagnosisFile(feature) {
+  return path.join(featureDir(feature), 'errors', 'diagnosis.md');
+}
+
 export function styleFile() {
   return path.join(ledgerRoot(), 'style.md');
 }
@@ -73,6 +77,14 @@ export function indexFile() {
   return path.join(ledgerRoot(), 'index.json');
 }
 
+export function fragmentsDir() {
+  return path.join(ledgerRoot(), 'index-fragments');
+}
+
+export function fragmentFile(feature) {
+  return path.join(fragmentsDir(), `${feature}.json`);
+}
+
 export function configFile() {
   return path.join(ledgerRoot(), 'config.json');
 }
@@ -82,9 +94,9 @@ export function dashboardFile() {
 }
 
 export function requireLedgerInitialized() {
-  if (!fs.existsSync(indexFile())) {
+  if (!fs.existsSync(styleFile())) {
     throw new Error(
-      `No ${LEDGER_DIRNAME}/index.json found. Run \`ledger init\` first.`
+      `${LEDGER_DIRNAME}/ isn't initialized here. Run \`ledger init\` first.`
     );
   }
 }

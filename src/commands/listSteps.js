@@ -1,26 +1,27 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import prompts from 'prompts';
-import { findProjectRoot, stepDir, stepFile, indexFile } from '../lib/paths.js';
-import { loadIndex, saveIndex, newFeatureEntry } from '../lib/index-store.js';
+import { findProjectRoot, stepDir, stepFile, brainDumpFile, sketchFile, testOutlineFile, fragmentFile } from '../lib/paths.js';
+import { featureExists, loadFeature, saveFeature, newFeatureEntry, nextOrder } from '../lib/index-store.js';
 import { stageAndCommit } from '../lib/git.js';
 import { proposeSteps } from '../lib/ai.js';
 import { writeStepFile } from '../lib/frontmatter.js';
-import { defaultBodyForStep, newStepFrontmatter } from '../lib/templates.js';
+import { defaultBodyForStep, newStepFrontmatter, ensureRoundFile } from '../lib/templates.js';
+import { buildDashboard } from './buildDashboard.js';
 
 export async function listSteps(feature, opts = {}) {
-  const index = loadIndex();
-  let entry = index.features[feature];
+  let entry;
 
-  if (!entry) {
+  if (!featureExists(feature)) {
     if (!opts.description) {
       throw new Error(
         `Unknown feature "${feature}". Register it first with \`ledger list-features\`, ` +
           `or create it inline with \`ledger list-steps ${feature} --description "..."\`.`
       );
     }
-    entry = newFeatureEntry({ name: feature, description: opts.description });
-    index.features[feature] = entry;
+    entry = newFeatureEntry({ name: feature, description: opts.description, order: nextOrder() });
+  } else {
+    entry = loadFeature(feature);
   }
 
   if (entry.steps) {
@@ -72,7 +73,7 @@ export async function listSteps(feature, opts = {}) {
   entry.versions = [{ version: 1, steps: {} }];
 
   const root = findProjectRoot();
-  const relPaths = [path.relative(root, indexFile())];
+  const relPaths = [path.relative(root, fragmentFile(feature))];
 
   for (const step of finalSteps) {
     const dir = stepDir(feature, step);
@@ -84,10 +85,32 @@ export async function listSteps(feature, opts = {}) {
       const fm = newStepFrontmatter({ feature, step, version: 1 });
       writeStepFile(file, fm, defaultBodyForStep(step));
       relPaths.push(path.relative(root, file));
+
+      // Pre-create brain-dump.md now, not just on first `draft` — so there's
+      // somewhere to write a large brain dump directly from the start (feedback).
+      const bdFile = brainDumpFile(feature, step);
+      if (ensureRoundFile(bdFile, { feature, step, version: 1 })) {
+        relPaths.push(path.relative(root, bdFile));
+      }
+    }
+    if (step === 'code') {
+      const skFile = sketchFile(feature);
+      if (ensureRoundFile(skFile, { feature, step: 'code', version: 1 })) {
+        relPaths.push(path.relative(root, skFile));
+      }
+    }
+    if (step === 'test') {
+      // Pre-created empty (frontmatter only) — `draft test` treats "no real content
+      // yet" as the signal to propose an outline, so this is safe to seed early and
+      // gives somewhere to write/paste a big outline directly (feedback).
+      const outFile = testOutlineFile(feature);
+      if (ensureRoundFile(outFile, { feature, step: 'test', version: 1 })) {
+        relPaths.push(path.relative(root, outFile));
+      }
     }
   }
 
-  saveIndex(index);
+  saveFeature(feature, entry);
 
   const sha = stageAndCommit(
     relPaths,
@@ -95,5 +118,6 @@ export async function listSteps(feature, opts = {}) {
   );
 
   console.log(`\nLocked in. Committed ${sha.slice(0, 12)}.`);
+  await buildDashboard();
   console.log(`Next: ledger draft ${finalSteps[0]} ${feature}`);
 }

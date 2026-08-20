@@ -4,11 +4,12 @@ import {
   findProjectRoot, stepFile, brainDumpFile, sketchFile, codeAnnotationsFile,
   testOutlineFile, testFile, styleFile, architectureFile, LEDGER_DIRNAME,
 } from '../lib/paths.js';
-import { loadIndex, saveIndex, getFeature, getCurrentVersion } from '../lib/index-store.js';
+import { loadFeature, saveFeature, getCurrentVersion } from '../lib/index-store.js';
 import { readStepFile, writeStepFile } from '../lib/frontmatter.js';
-import { appendRound, readOrEmpty, KNOWN_STEP_TEMPLATES } from '../lib/templates.js';
+import { appendRound, readOrEmpty, hasContent, KNOWN_STEP_TEMPLATES } from '../lib/templates.js';
 import { contentHash, hashOfFiles } from '../lib/hash.js';
 import { checkLogicIntegrity } from '../lib/logicIntegrity.js';
+import { getLastAiModel, loadConfig } from '../lib/ai-providers/provider.js';
 import {
   draftLogic as aiDraftLogic,
   draftCode as aiDraftCode,
@@ -50,9 +51,22 @@ function logicContent(feature) {
   return readStepFile(file).content.replace(DRAFT_BANNER, '').trim();
 }
 
+/** Shared --file handling for round-labeled inputs (brain-dump.md/sketch.md): if `opts.file` is
+ * set, `text` (the inline CLI arg) is ignored and the file must already have content to read from. */
+function resolveRoundInput(text, opts, file, label) {
+  if (opts && opts.file) {
+    if (!hasContent(file)) {
+      throw new Error(`--file given but ${file} has no content yet — write into it first, then re-run.`);
+    }
+    console.log(`(--file) reading ${label} from ${file}`);
+    return null; // nothing new to append — the existing file content is the input
+  }
+  return text;
+}
+
 // --- logic -------------------------------------------------------------
 
-async function draftLogicStep(index, entry, feature, brainDump) {
+async function draftLogicStep(entry, feature, brainDump, opts) {
   const file = stepFile(feature, 'logic');
   if (!fs.existsSync(file)) {
     throw new Error(`${file} does not exist. Run \`ledger list-steps ${feature}\` first.`);
@@ -66,13 +80,13 @@ async function draftLogicStep(index, entry, feature, brainDump) {
   }
 
   const bdFile = brainDumpFile(feature, 'logic');
+  const version = getCurrentVersion(entry);
+  brainDump = resolveRoundInput(brainDump, opts, bdFile, 'your brain dump');
   if (brainDump && brainDump.trim()) {
-    appendRound(bdFile, brainDump);
+    appendRound(bdFile, brainDump, { feature, step: 'logic', version: version.version });
     console.log(`Appended round to ${bdFile}`);
-  } else if (!fs.existsSync(bdFile)) {
-    fs.mkdirSync(path.dirname(bdFile), { recursive: true });
-    fs.writeFileSync(bdFile, '', 'utf8');
-    console.log(`Created empty ${bdFile} — add your own thinking there (or pass it inline) and re-run \`ledger draft logic ${feature}\`.`);
+  } else if (!hasContent(bdFile)) {
+    console.log(`${bdFile} is empty — add your own thinking there (or pass it inline) and re-run \`ledger draft logic ${feature}\`.`);
     console.log(`Re-running now with no brain dump will have AI improvise from the feature description alone.`);
   }
 
@@ -89,9 +103,8 @@ async function draftLogicStep(index, entry, feature, brainDump) {
   const draft = await aiDraftLogic(feature, entry.description, hasHistory ? history : null, previousDraft, architectureText);
 
   writeStepFile(file, parsed.data, DRAFT_BANNER + draft + '\n');
-  const version = getCurrentVersion(entry);
-  version.steps.logic = { ...(version.steps.logic || {}), drafted: true };
-  saveIndex(index);
+  version.steps.logic = { ...(version.steps.logic || {}), drafted: true, aiModel: getLastAiModel() };
+  saveFeature(feature, entry);
 
   console.log(`Draft written to ${file}`);
   console.log(`Read it, edit it into your own understanding, then run: ledger commit logic ${feature}`);
@@ -99,7 +112,7 @@ async function draftLogicStep(index, entry, feature, brainDump) {
 
 // --- code ----------------------------------------------------------------
 
-async function draftCodeStep(index, entry, feature, sketch) {
+async function draftCodeStep(entry, feature, sketch, opts) {
   const version = getCurrentVersion(entry);
   if (version.steps.code?.commitSha) {
     throw new Error(
@@ -112,8 +125,9 @@ async function draftCodeStep(index, entry, feature, sketch) {
   }
 
   const skFile = sketchFile(feature);
+  sketch = resolveRoundInput(sketch, opts, skFile, 'your code sketch');
   if (sketch && sketch.trim()) {
-    appendRound(skFile, sketch);
+    appendRound(skFile, sketch, { feature, step: 'code', version: version.version });
     console.log(`Appended round to ${skFile}`);
   }
   const sketchHistory = readOrEmpty(skFile);
@@ -122,6 +136,7 @@ async function draftCodeStep(index, entry, feature, sketch) {
 
   console.log(`Asking Claude to write code for "${feature}" from its committed Logic...\n`);
   const { files, notes } = await aiDraftCode(feature, { logicText, styleText, sketchHistory });
+  const draftModel = getLastAiModel();
 
   const root = findProjectRoot();
   const writtenPaths = [];
@@ -138,8 +153,9 @@ async function draftCodeStep(index, entry, feature, sketch) {
     ...(version.steps.code || {}),
     generatedPaths: writtenPaths,
     generatedHash: hashOfFiles(root, writtenPaths),
+    aiModel: draftModel,
   };
-  saveIndex(index);
+  saveFeature(feature, entry);
 
   console.log(`Wrote ${writtenPaths.length} file(s):`);
   for (const p of writtenPaths) console.log(`  - ${p}`);
@@ -161,7 +177,7 @@ async function draftCodeStep(index, entry, feature, sketch) {
 
 // --- test ------------------------------------------------------------------
 
-async function draftTestStep(index, entry, feature) {
+async function draftTestStep(entry, feature) {
   const version = getCurrentVersion(entry);
   if (version.steps.test?.commitSha) {
     throw new Error(
@@ -176,7 +192,12 @@ async function draftTestStep(index, entry, feature) {
   const outlinePath = testOutlineFile(feature);
   const logicText = logicContent(feature);
 
-  if (!fs.existsSync(outlinePath)) {
+  // Phase gate is "has real content", not "file exists" — test-outline.md is now
+  // pre-created (empty, with frontmatter) at list-steps time, same as brain-dump.md,
+  // so there's somewhere to write a big outline directly. An empty/frontmatter-only
+  // file still means "propose an outline"; a filled one (AI-proposed or hand-written)
+  // means "generate the real test content".
+  if (!hasContent(outlinePath)) {
     console.log(`Asking Claude to propose a test outline for "${feature}" from its committed Logic...\n`);
     const { automatable, manual } = await proposeTestOutline(feature, logicText);
 
@@ -193,14 +214,15 @@ async function draftTestStep(index, entry, feature) {
       `## Manual / Visual\n\n` +
       manual.map((i) => `- [ ] ${i}`).join('\n') + '\n';
 
+    const existing = fs.existsSync(outlinePath) ? readStepFile(outlinePath) : { data: { feature, step: 'test', version: version.version } };
     fs.mkdirSync(path.dirname(outlinePath), { recursive: true });
-    fs.writeFileSync(outlinePath, body, 'utf8');
+    writeStepFile(outlinePath, existing.data, body);
 
     version.steps.test = {
       ...(version.steps.test || {}),
-      outlineHash: contentHash(body),
+      outlineHash: contentHash(fs.readFileSync(outlinePath, 'utf8')),
     };
-    saveIndex(index);
+    saveFeature(feature, entry);
 
     console.log(`Outline written to ${outlinePath}`);
     console.log(`Review/edit it, then re-run \`ledger draft test ${feature}\` to generate the real test content.`);
@@ -209,6 +231,7 @@ async function draftTestStep(index, entry, feature) {
 
   const outlineText = fs.readFileSync(outlinePath, 'utf8');
   const styleText = readOrEmpty(styleFile());
+  const config = loadConfig();
 
   console.log(`Asking Claude to generate real test content for "${feature}"...\n`);
   const { testFilePath, testCode, manualItems } = await aiDraftTest(feature, {
@@ -217,6 +240,7 @@ async function draftTestStep(index, entry, feature) {
     outlineText,
     codePaths: entry.codePaths,
   });
+  const draftModel = getLastAiModel();
 
   const rel = assertSafeRelPath(testFilePath);
   const root = findProjectRoot();
@@ -227,12 +251,19 @@ async function draftTestStep(index, entry, feature) {
   const testMdBody =
     `<!--\n` +
     `Point-in-time snapshot, synced automatically by \`ledger draft test\`. The automated section\n` +
-    `is overwritten each draft — hand-edit only the manual checklist's checkboxes.\n` +
+    `is overwritten each draft — hand-edit only the manual checklist's checkboxes (and their notes).\n` +
     `-->\n\n` +
     `# Test — ${feature}\n\n` +
+    `## How to run\n\n` +
+    (config.testCommand
+      ? `\`${config.testCommand}\` (also run automatically by \`ledger commit test\`, which blocks the commit if it fails)\n\n`
+      : `Not set yet — \`ledger commit test ${feature}\` will ask for it the first time and remember it in LEDGER/config.json.\n\n`) +
     `## Automated (\`${rel}\`)\n\n` +
     '```\n' + testCode + '\n```\n\n' +
     `## Manual / Visual checklist\n\n` +
+    `Check each box once you've actually verified it yourself, and append a short note after the\n` +
+    `item describing what you checked/observed (e.g. \`- [x] Button aligns correctly on mobile — \n` +
+    `verified in Chrome DevTools @375px\`). \`ledger commit test\` blocks until every box is checked.\n\n` +
     manualItems.map((i) => `- [ ] ${i}`).join('\n') + '\n';
 
   fs.writeFileSync(testFile(feature), testMdBody, 'utf8');
@@ -241,17 +272,18 @@ async function draftTestStep(index, entry, feature) {
     ...(version.steps.test || {}),
     testFilePath: rel,
     generatedHash: contentHash(testMdBody),
+    aiModel: draftModel,
   };
-  saveIndex(index);
+  saveFeature(feature, entry);
 
   console.log(`Test written to ${abs}`);
   console.log(`Snapshot + manual checklist written to ${testFile(feature)}`);
-  console.log(`\nRun the automated tests yourself, check off manual items in ${testFile(feature)}, then: ledger commit test ${feature}`);
+  console.log(`\nRun the automated tests yourself, check off manual items (with notes) in ${testFile(feature)}, then: ledger commit test ${feature}`);
 }
 
 // --- document ----------------------------------------------------------------
 
-async function draftDocumentStep(index, entry, feature, description) {
+async function draftDocumentStep(entry, feature, description, opts) {
   const file = stepFile(feature, 'document');
   if (!fs.existsSync(file)) {
     throw new Error(`${file} does not exist. Run \`ledger list-steps ${feature}\` first.`);
@@ -264,19 +296,22 @@ async function draftDocumentStep(index, entry, feature, description) {
     );
   }
 
+  const version = getCurrentVersion(entry);
   const bdFile = brainDumpFile(feature, 'document');
+  description = resolveRoundInput(description, opts, bdFile, 'your notes');
   if (description && description.trim()) {
-    appendRound(bdFile, description);
+    appendRound(bdFile, description, { feature, step: 'document', version: version.version });
     console.log(`Appended round to ${bdFile}`);
   }
   const history = readOrEmpty(bdFile);
 
   let draft;
+  let draftModel;
   if (history.trim()) {
     console.log(`Asking Claude to organize your notes into "${feature}" documentation...\n`);
     draft = await organizeStep(feature, 'document', description, history);
+    draftModel = getLastAiModel();
   } else {
-    const version = getCurrentVersion(entry);
     if (!version.steps.logic?.commitSha) {
       throw new Error(`Feature "${feature}" has no committed Logic yet — run \`ledger commit logic ${feature}\` first, or pass a description to draft from your own notes instead.`);
     }
@@ -294,12 +329,12 @@ async function draftDocumentStep(index, entry, feature, description) {
 
     console.log(`Asking Claude to draft "${feature}" documentation from committed Logic + Code...\n`);
     draft = await aiDraftDocument(feature, { logicText, codeContext });
+    draftModel = getLastAiModel();
   }
 
   writeStepFile(file, parsed.data, DRAFT_BANNER + draft + '\n');
-  const version = getCurrentVersion(entry);
-  version.steps.document = { ...(version.steps.document || {}), drafted: true };
-  saveIndex(index);
+  version.steps.document = { ...(version.steps.document || {}), drafted: true, aiModel: draftModel };
+  saveFeature(feature, entry);
 
   console.log(`Draft written to ${file}`);
   console.log(`Read it, edit it, then run: ledger commit document ${feature}`);
@@ -307,7 +342,7 @@ async function draftDocumentStep(index, entry, feature, description) {
 
 // --- generic/custom step -----------------------------------------------------
 
-async function draftGenericStep(index, entry, feature, step, description) {
+async function draftGenericStep(entry, feature, step, description, opts) {
   const file = stepFile(feature, step);
   if (!fs.existsSync(file)) {
     throw new Error(`${file} does not exist. Run \`ledger list-steps ${feature}\` or \`ledger add-step ${feature} ${step}\` first.`);
@@ -320,23 +355,24 @@ async function draftGenericStep(index, entry, feature, step, description) {
     );
   }
 
+  const version = getCurrentVersion(entry);
   const bdFile = brainDumpFile(feature, step);
+  description = resolveRoundInput(description, opts, bdFile, 'your notes');
   if (description && description.trim()) {
-    appendRound(bdFile, description);
+    appendRound(bdFile, description, { feature, step, version: version.version });
   }
   const history = readOrEmpty(bdFile);
 
-  const markDrafted = () => {
-    const version = getCurrentVersion(entry);
-    version.steps[step] = { ...(version.steps[step] || {}), drafted: true };
-    saveIndex(index);
+  const markDrafted = (aiModel) => {
+    version.steps[step] = { ...(version.steps[step] || {}), drafted: true, aiModel: aiModel || null };
+    saveFeature(feature, entry);
   };
 
   if (history.trim()) {
     console.log(`Asking Claude to organize your notes into "${feature}" ${step}...\n`);
     const draft = await organizeStep(feature, step, description, history);
     writeStepFile(file, parsed.data, DRAFT_BANNER + draft + '\n');
-    markDrafted();
+    markDrafted(getLastAiModel());
     console.log(`Draft written to ${file}`);
     console.log(`Read it, edit it, then run: ledger commit ${step} ${feature}`);
     return;
@@ -345,7 +381,7 @@ async function draftGenericStep(index, entry, feature, step, description) {
   const template = KNOWN_STEP_TEMPLATES[step.toLowerCase()];
   if (template) {
     writeStepFile(file, parsed.data, template);
-    markDrafted();
+    markDrafted(null);
     console.log(`Seeded ${file} from the "${step}" template — fully editable, discard whatever isn't relevant.`);
     console.log(`When ready: ledger commit ${step} ${feature}`);
     return;
@@ -357,22 +393,21 @@ async function draftGenericStep(index, entry, feature, step, description) {
 
 // --- dispatch ----------------------------------------------------------------
 
-export async function draftStep(step, feature, description) {
-  const index = loadIndex();
-  const entry = getFeature(index, feature);
+export async function draftStep(step, feature, description, opts = {}) {
+  const entry = loadFeature(feature);
   requireStepInPipeline(entry, feature, step);
   checkLogicIntegrity(feature, entry);
 
   switch (step) {
     case 'logic':
-      return draftLogicStep(index, entry, feature, description);
+      return draftLogicStep(entry, feature, description, opts);
     case 'code':
-      return draftCodeStep(index, entry, feature, description);
+      return draftCodeStep(entry, feature, description, opts);
     case 'test':
-      return draftTestStep(index, entry, feature);
+      return draftTestStep(entry, feature);
     case 'document':
-      return draftDocumentStep(index, entry, feature, description);
+      return draftDocumentStep(entry, feature, description, opts);
     default:
-      return draftGenericStep(index, entry, feature, step, description);
+      return draftGenericStep(entry, feature, step, description, opts);
   }
 }

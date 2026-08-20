@@ -2,12 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import prompts from 'prompts';
-import { findProjectRoot, stepDir, stepFile, indexFile } from '../lib/paths.js';
-import { loadIndex, saveIndex, newFeatureEntry } from '../lib/index-store.js';
+import { findProjectRoot, stepDir, stepFile, fragmentFile } from '../lib/paths.js';
+import { featureExists, saveFeature, loadFeature, newFeatureEntry, nextOrder } from '../lib/index-store.js';
 import { stageAndCommit } from '../lib/git.js';
 import { proposeFeaturesFromCode, proposeSteps } from '../lib/ai.js';
 import { writeStepFile } from '../lib/frontmatter.js';
 import { defaultBodyForStep, newStepFrontmatter } from '../lib/templates.js';
+import { buildDashboard } from './buildDashboard.js';
 
 function listTrackedFiles(root) {
   const out = execFileSync('git', ['ls-files'], { cwd: root, encoding: 'utf8' });
@@ -23,7 +24,6 @@ function todayIso() {
 
 export async function ledgerInit() {
   const root = findProjectRoot();
-  const index = loadIndex();
   const files = listTrackedFiles(root);
 
   if (files.length === 0) {
@@ -34,19 +34,18 @@ export async function ledgerInit() {
   console.log(`Asking Claude to propose a feature decomposition for ${files.length} tracked file(s)...\n`);
   const proposed = await proposeFeaturesFromCode(files.join('\n'));
 
-  const known = new Set(Object.keys(index.features));
   const choices = proposed.map((f) => ({
-    title: `${f.name}${known.has(f.slug) ? ' (already registered)' : ''}`,
+    title: `${f.name}${featureExists(f.slug) ? ' (already registered)' : ''}`,
     description: `${f.slug} — ${f.description}${f.group ? ` [${f.group}]` : ''} — ${(f.codePaths || []).length} path(s)`,
     value: f,
-    selected: !known.has(f.slug),
-    disabled: known.has(f.slug),
+    selected: !featureExists(f.slug),
+    disabled: featureExists(f.slug),
   }));
 
   console.log('Proposed features:');
   for (const f of proposed) {
     console.log(
-      `  - ${f.slug}: ${f.description} (${(f.codePaths || []).length} path(s))${known.has(f.slug) ? '  [already registered]' : ''}`
+      `  - ${f.slug}: ${f.description} (${(f.codePaths || []).length} path(s))${featureExists(f.slug) ? '  [already registered]' : ''}`
     );
   }
   console.log('');
@@ -64,18 +63,19 @@ export async function ledgerInit() {
     return;
   }
 
-  const relPaths = [path.relative(root, indexFile())];
+  const root2 = root;
+  const relPaths = [];
+  let order = nextOrder();
 
   for (const f of selected) {
     console.log(`\nAsking Claude to propose a step pipeline for "${f.slug}"...`);
     const { steps } = await proposeSteps(f.slug, f.description);
 
-    const entry = newFeatureEntry({ name: f.name, description: f.description, group: f.group ?? null });
+    const entry = newFeatureEntry({ name: f.name, description: f.description, group: f.group ?? null, order: order++ });
     entry.codePaths = f.codePaths || [];
     entry.steps = steps;
     entry.currentVersion = 1;
     entry.versions = [{ version: 1, steps: {} }];
-    index.features[f.slug] = entry;
 
     for (const step of steps) {
       if (step === 'code' || step === 'test') {
@@ -85,24 +85,25 @@ export async function ledgerInit() {
       const file = stepFile(f.slug, step);
       fs.mkdirSync(path.dirname(file), { recursive: true });
       writeStepFile(file, newStepFrontmatter({ feature: f.slug, step, version: 1 }), defaultBodyForStep(step));
-      relPaths.push(path.relative(root, file));
+      relPaths.push(path.relative(root2, file));
     }
 
     if (steps.includes('code') && entry.codePaths.length) {
       const codeDir = stepDir(f.slug, 'code');
       for (const relPath of entry.codePaths) {
-        const src = path.join(root, relPath);
+        const src = path.join(root2, relPath);
         if (!fs.existsSync(src)) continue;
         const dest = path.join(codeDir, relPath);
         fs.mkdirSync(path.dirname(dest), { recursive: true });
         fs.cpSync(src, dest, { recursive: true });
-        relPaths.push(path.relative(root, dest));
+        relPaths.push(path.relative(root2, dest));
       }
-      entry.versions[0].steps.code = { attribution: 'legacy', commitSha: null, date: todayIso() };
+      entry.versions[0].steps.code = { attribution: 'legacy', identity: null, commitSha: null, date: todayIso() };
     }
-  }
 
-  saveIndex(index);
+    saveFeature(f.slug, entry);
+    relPaths.push(path.relative(root2, fragmentFile(f.slug)));
+  }
 
   const sha = stageAndCommit(
     Array.from(new Set(relPaths)),
@@ -110,18 +111,21 @@ export async function ledgerInit() {
   );
 
   // Record the actual commit SHA into each bootstrapped feature's Code step.
-  const index2 = loadIndex();
+  const fragmentPaths = [];
   for (const f of selected) {
-    const e = index2.features[f.slug];
-    if (e?.versions[0]?.steps.code) e.versions[0].steps.code.commitSha = sha;
+    const e = loadFeature(f.slug);
+    if (e?.versions[0]?.steps.code) {
+      e.versions[0].steps.code.commitSha = sha;
+      saveFeature(f.slug, e);
+      fragmentPaths.push(path.relative(root2, fragmentFile(f.slug)));
+    }
   }
-  saveIndex(index2);
-  const recordSha = stageAndCommit(
-    [path.relative(root, indexFile())],
-    `chore(ledger): record ledger-init bootstrap SHA (${sha.slice(0, 12)})`
-  );
+  const recordSha = fragmentPaths.length
+    ? stageAndCommit(fragmentPaths, `chore(ledger): record ledger-init bootstrap SHA (${sha.slice(0, 12)})`)
+    : sha;
 
   console.log(`\nBootstrapped ${selected.length} feature(s). Committed ${sha.slice(0, 12)} and ${recordSha.slice(0, 12)}.`);
   console.log(`Code snapshots recorded with attribution "legacy". Logic/Test/Document left blank — draft them when ready.`);
   console.log(`Re-run \`ledger-init\` any time — already-registered features are skipped automatically.`);
+  await buildDashboard();
 }

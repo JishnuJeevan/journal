@@ -1,6 +1,6 @@
 # The Ledger Method — Specification
 
-> **Status:** Draft for implementation. This document is meant to be handed to an AI coding assistant (e.g. Claude Code) to build and evolve the tool. Open questions are marked explicitly and should not be silently resolved by the implementer — flag them back to the author instead. Items marked **(inferred)** are extensions applied by analogy to an already-confirmed pattern elsewhere in the spec, not something explicitly discussed for that specific case — flag these back to the author for confirmation too, don't just build them.
+> **Status:** Draft for implementation. This document is meant to be handed to an AI coding assistant (e.g. Claude Code) to build and evolve the tool. Open questions are marked explicitly in §12 and should not be silently resolved by the implementer — flag them back to the author instead.
 
 ---
 
@@ -45,7 +45,9 @@ project-root/
 ├── tests/                        (actual, runnable test files — e.g. pytest)
 ├── LEDGER/
 │   ├── index.html                 <- generated dashboard. NEVER hand-edited.
-│   ├── index.json                 <- data source for the dashboard (§8.1)
+│   ├── index.json                 <- aggregated data source for the dashboard, generated only (§8.1)
+│   ├── index-fragments/           <- per-feature write targets, avoids multi-user collisions (§6.7, §8.1)
+│   │   └── <feature-slug>.json
 │   ├── style.md                   <- global code style + testing preferences (§7)
 │   ├── architecture.md            <- project-wide system shape, read by draft logic (§7)
 │   ├── features/
@@ -54,7 +56,7 @@ project-root/
 │   │       │   ├── brain-dump.md   <- persistent, append-only history of every round (§4.1)
 │   │       │   └── logic.md        <- AI-organized, current committed Logic
 │   │       ├── code/
-│   │       │   ├── sketch.md       <- (inferred) optional code-level sketch, same pattern as brain-dump.md
+│   │       │   ├── sketch.md       <- optional code-level sketch, persists every round like brain-dump.md
 │   │       │   ├── <code snapshot files>
 │   │       │   └── annotations.md  <- unfamiliar-term flags (§6.6)
 │   │       ├── test/
@@ -85,7 +87,7 @@ project-root/
 
 - **What it is:** The actual implementation, derived from the feature's committed Logic (the primary input — `draft code` reads it directly, and a well-written Logic naturally determines file structure, including multi-file splits, without a separate mechanism for that).
 - **Command:** `draft code <feature> ["sketch"]` (i.e. `draft <step> <feature>`, §11, with step=code and the optional argument used as a sketch)
-- **Optional sketch input:** the user may additionally provide a rough code-level sketch/pseudocode. **(Inferred, not yet explicitly confirmed):** by analogy with `brain-dump.md`, this likely should also persist to `code/sketch.md` rather than being used once and discarded, for the same future diff-scoring reasons — flagged in §12 for confirmation.
+- **Optional sketch input:** the user may additionally provide a rough code-level sketch/pseudocode, which persists to `code/sketch.md` — every sketch kept, same as `brain-dump.md` does for Logic, rather than being used once and discarded. Confirmed decision, for the same future diff-scoring reasons.
 - **Style:** consults `LEDGER/style.md` (§7) before generating.
 - **Annotations:** produces `code/annotations.md` flagging unfamiliar terms not present in the Logic (§6.6).
 - **Snapshot:** the real code lives in `src/`; an exact copy is synced to `LEDGER/features/feature-x/code/` at commit time (§6.2).
@@ -99,7 +101,7 @@ project-root/
   2. **User reviews and edits `test-outline.md` directly** — adding/removing cases, reclassifying automatable vs. manual, and adding notes on how a specific test should be written.
   3. **Re-running `draft test <feature>`** (outline now exists) generates the real content: actual test code for automatable items, written to a real, runnable file (e.g. `tests/test_feature.py`, following the testing framework named in `style.md` — §7), with a copy synced into `test/test.md`; and a checklist for manual/visual items, which exists only in `test/test.md` since there's no "real" file for something a human just looks at.
 - **`commit test` requirement:** does not complete until automated tests pass **and** every manual checklist item has been explicitly checked off — not a general "looks fine, commit."
-- **Re-editing the outline:** no limit — edit `test-outline.md` as many times as needed, rerun `draft test` to regenerate. **(Inferred, not yet explicitly confirmed):** whether edits to `test-outline.md` should follow the same round-labeled convention as `brain-dump.md` (§4.1), or just be freely re-edited without that structure — flagged in §12.
+- **Re-editing the outline:** no limit — edit `test-outline.md` as many times as needed, rerun `draft test` to regenerate. Edits follow the same round-labeled convention as `brain-dump.md` (§4.1) — each round its own labeled section, not mixed into prior text — confirmed decision, kept consistent for the same reasons: preserves history for future diff-scoring, and merges cleanly under §6.7's concurrent-commit handling.
 
 ### 4.4 Document
 - **What it is:** Documentation of what the code does, written so others (including future-you) can understand it without re-deriving the logic.
@@ -136,6 +138,29 @@ Not one of the four/customizable steps — a separate, flat, append-only log per
 - **AI does not use this automatically.** An AI agent (e.g. Claude Code) working on the project won't spontaneously start using `log-error`/`resolve-error` just because they exist — it only does so if explicitly instructed to as part of its working instructions for the project. Worth stating directly to any AI agent given autonomy over running/fixing a feature, if this record is wanted.
 - **Dashboard:** surfaced as its own cell per feature (§8) — clicking it expands the list of entries (open and resolved), each showing its fix note and attribution dot, same visual treatment as a step.
 
+### 4.7 Integration Testing (cross-feature behavior)
+
+Test (§4.3) is scoped to one feature and derives from that feature's own Logic — it has no natural home for behavior that spans features (e.g. "after Login succeeds, Session Management reflects logged-in state"). Rather than a new mechanism, this is handled by treating the cross-feature concern as its **own feature, with a reduced pipeline**:
+
+- `add-feature login-session-integration --group auth`, then `list-steps` configured as **Logic → Test only** — skip Code entirely, already supported by §4.5's customizable step sets. No new command, no new file structure.
+- **Logic** describes the contract between features (ordering/timing guarantees, what one feature can assume about another) rather than one feature's internal reasoning.
+- **Test** derives an integration test from that Logic via the normal two-phase outline-then-generate flow (§4.3).
+- With no Code step, there's no `code/` content or snapshot sync, and the drift check (§6.5) simplifies to just Logic's own hand-edit protection — no downstream Code file to go stale against.
+- **Dashboard:** the absence of a `code` step in the pipeline is exactly what routes a feature into the automatic "Integration Tests" section (§8) rather than its normal group — detected from structure, not a self-reported tag.
+
+**Async/timing hazards** get a partial safety net through two mechanisms not originally designed for this: §6.6's annotations catch async/threading terms appearing in code that Logic never mentioned; the integration pseudo-feature's own Logic is a reasonable place to state an explicit ordering contract. Full dependency modeling between features stays deferred (§12) — this gives the reasoning a home, the same way `architecture.md` does for system-wide shape (§7), without solving formal dependency tracking.
+
+### 4.8 Cross-Feature Dependencies (declared, not inferred)
+
+Real automatic dependency detection would need either static analysis of Code (only possible *after* Code exists — too late to inform the Logic that precedes it) or semantic comparison of Logic text (the same hard problem as upgrading §6.6's annotations from textual to semantic). Neither exists. The practical middle ground: **dependencies are explicitly declared, not inferred** — this is a deliberate exception to the method's usual "detect automatically, don't self-report" principle, made only because no automatic alternative currently exists (unlike every other place self-report was avoided in favor of a cheap automatic signal).
+
+- **Declared inside Logic itself**, not a separate mechanism — a `depends-on:` line naming other features, written as part of the same reasoning process where the dependency is actually being decided. `commit logic` extracts it the same way it already extracts attribution/SHA/identity (§5), writing it into that feature's fragment (§8.1).
+- **Inherits Logic's existing protections for free.** Because it lives inside `logic.md`, a declared dependency is automatically covered by Logic's lock-after-commit and drift detection (§6.5) — no new locking mechanism needed.
+- **Visual graph, inside the existing dashboard, as a toggle — not a separate file.** Same reasoning as Integration Tests (§4.7, §8): one file, switching what's displayed, not navigating away. Nodes are features, edges are declared dependencies, Obsidian-style — this is the only surface for viewing dependencies; a separate plain-text CLI command (`ledger deps`) was considered and cut, since folding the graph into the same dashboard file removed most of the friction that would have justified a second, terminal-only view of the identical data.
+- **Self-report safety net:** extends §6.6's annotations — every feature's `codePaths` are already recorded (§3, §6.2), so if generated code imports something matching another feature's recorded `codePaths` that was never named in that feature's `depends-on`, flag it. Not full static analysis, just a path match against data already collected — catches a forgotten declaration after the fact, even though it can't prevent one.
+- **Fixing a caught, missed dependency requires `new-version` — no lighter exception.** Because Code is drafted from *committed* Logic (§4.2), by the time the safety net above can even fire, Logic is already locked. Logic has no "minor edit, one-line note" tier the way Code/Test do (§6.5) — every post-commit Logic change, including adding a missed `depends-on` line, points at `new-version`. This was a deliberate choice, not an oversight: a narrower exception (fixing just the dependency line without a full version bump) was considered and rejected in favor of staying consistent with Logic's strict lock, even though it means a single missed dependency costs a full new version to correct.
+- **Claim vs. evidence, deferred:** a future upgrade — once real static analysis exists — could overlay *actual* Code-level dependencies against *declared* ones and flag mismatches. Not built now; declared dependencies plus the annotations safety net is the whole of v1.
+
 ---
 
 ## 5. Attribution Model
@@ -146,6 +171,13 @@ Attribution is recorded per step, per version, and is **automatically detected f
 - **`ai`** — no brain dump/sketch was present; AI generated the content from the feature/file description alone.
 - **`legacy`** — content originates from `ledger-init`'s bootstrap of a pre-existing codebase (§9.1).
 
+**Specific identity, not just category — captured automatically, no new self-report.** Every step's commit already carries real identity data the tool was previously discarding:
+
+- **`person` entries carry the git commit author's name** (from `git config user.name`), read directly off the commit `commit-*` already makes (§6.1) — not a separate declaration. If a step was genuinely done by more than one person, git's own `Co-authored-by:` commit trailer convention is read the same way, so multiple names attach to one entry when that's how it was actually committed. Email is deliberately not captured or shown — name only.
+- **`ai` entries carry the specific model/provider identifier** from whichever `AIProvider` adapter (§10) actually handled that draft (e.g. `claude-sonnet-4-6`) — information the tool already has internally at draft time and was simply not retaining.
+- This scales to any number of contributors with no new mechanism: each step, each version, already gets its own commit and therefore its own author — a project with one contributor and a project with twenty behave identically at the data layer, since nothing aggregates across people, it's just recorded per commit as it already happens.
+- **Display stays the existing three-color scheme** (person/ai/legacy), not a color per individual — a distinct color per contributor stops being readable past a handful of people. The specific name/model appears as plain text alongside the existing colored dot, so the fast at-a-glance signal (person vs. AI vs. legacy) is unchanged, and the specific identity is there when you want to read it.
+
 **Deferred (see §12):** degree-of-collaboration scoring via before/after diffs, and scoring based on the full `brain-dump.md` round history rather than just its latest state.
 
 ---
@@ -153,16 +185,16 @@ Attribution is recorded per step, per version, and is **automatically detected f
 ## 6. Git Integration
 
 ### 6.1 Commit-per-step
-Each step has its own commit command. Running it determines attribution (§5), performs a git commit, and records the SHA into `LEDGER/index.json` (§8.1).
+Each step has its own commit command. Running it determines attribution (§5), performs a git commit, and records the SHA into that feature's fragment file (§8.1) — never the shared `LEDGER/index.json` directly.
 
 ### 6.2 Code snapshot sync
-`commit code` copies the relevant code into `LEDGER/features/feature-x/code/`, tagged with the commit SHA.
+`commit code` copies the relevant code into `LEDGER/features/feature-x/code/`, tagged with the commit SHA. The same pass also scans those files' import/require statements and records external packages referenced (filtering out relative/in-project imports) as that feature's `libraries` list in its fragment (§8.1) — fully automatic, no self-report, since this is plain syntax parsing rather than the harder semantic problem §4.8's feature-to-feature dependencies ran into. Not to be confused with §4.8's `dependsOn` — that's *feature*-to-*feature*; this is *feature*-to-*external package*.
 
 ### 6.3 Historical access via SHA
 Old-version links in the dashboard resolve via `git show <sha>:<path>`, since step files are overwritten each version.
 
 ### 6.4 Commit writes must stay in sync with the index
-Every `commit-*` command's git commit and its `LEDGER/index.json` write must not drift apart; fail loudly if both can't complete.
+Every `commit-*` command's git commit and its write to that feature's fragment file (§8.1) must not drift apart; fail loudly if both can't complete. Scoping this to one feature's fragment, rather than one shared file, makes the guarantee easier to hold — no risk of one feature's commit corrupting another's data in the same write.
 
 ### 6.5 Drift detection (Code and Test, plus Logic integrity)
 
@@ -184,6 +216,17 @@ After generating code, `draft code` compares the generated code's terms (functio
 - **Output:** `code/annotations.md`, one or two plain-language lines per flagged item.
 - **Passive, not interactive** — informational, nothing blocks on it.
 
+### 6.7 Concurrent commits (multi-user)
+
+Two people committing to *different* features around the same time never collide — see §8.1's per-feature fragment design, which removes that case entirely by construction.
+
+Two people committing to the **same feature** at the same time is a real conflict, not a false one from shared-file structure, and is handled by extending the lock already defined in §4.1:
+
+- **"First" is determined by git's own push order, not local commit order** — nothing new to build here. Git already rejects a push when the remote has changes the pusher doesn't have (standard behavior); this is the natural trigger point, not a separate network check the tool has to add on every local command.
+- **When the second person pulls and their local commit collides with the fragment now on the remote, the tool stops them and presents a choice — it does not auto-decide for them.** They're told a version was already locked (by whom), and can either run `new-version` themselves to carry their work forward, or discard it if it turns out to be unnecessary. Consistent with the method's standing rule that the tool flags and blocks but never silently makes a versioning decision on someone's behalf (same principle as Logic drift detection, §6.5).
+- **Nothing is overwritten.** v1 stays exactly as committed, recoverable via `git show <sha>:<path>` (§6.3); a chosen `new-version` builds v2 explicitly on top of it. Same "preserve, don't erase" principle as `remove-feature` (§9.3).
+- **Actually resolving the disagreement (is the second person's work still needed?) is a human/team conversation, not something the tool automates or forces** — it can surface who locked the version, but coordinating from there is outside its scope.
+
 ---
 
 ## 7. Global Style, Testing, and Architecture
@@ -204,11 +247,27 @@ This is a lightweight answer to the cross-feature/module-interaction question ra
 
 - **Generated only**, via `build-dashboard`. Never hand-edited.
 - **Layout:** Features as rows, steps as sub-rows, each version displayed as a column (following the original spreadsheet-style design). Features sharing a group tag (§2) cluster together in the display; ungrouped features appear individually. Each cell shows attribution and links to content.
+- **Integration-test pseudo-features get their own labeled section** (same treatment as "Ungrouped"), **detected automatically** — any feature whose step pipeline has no `code` step (§4.7) is routed there instead of its normal group, since that structural fact alone identifies it without needing anyone to self-tag it as an integration test.
+- **List / Graph toggle** — the default view is the feature list described above; toggling switches the same page to a node/edge dependency graph (§4.8), features as nodes, declared dependencies as edges. One file, one place to look, not a separate page — same reasoning as the Integration Tests section.
 - **Removed features:** hidden by default (a toggle reveals them) — the dashboard's default view shows only active features, keeping it uncluttered, while removed features (§9.3) remain fully present in the underlying data for anyone who wants to look.
 - **Not yet surfaced in the dashboard (deferred, §12):** whether a feature's manual test checklist is fully checked off. The Errors log is now surfaced (§4.6) — a per-feature cell showing open/resolved entries with attribution.
 
-### 8.1 Data source: `LEDGER/index.json`
-`build-dashboard` reads from a single JSON index file for build performance. Every `commit-*` command writes to it as part of that same command (§6.4).
+### 8.1 Data source: sharded fragments, aggregated into `LEDGER/index.json`
+
+`build-dashboard`'s output role is unchanged — it still reads one flat, fast-to-parse file to render from. What changed is the *write* path, to remove a real multi-user collision (§6.7):
+
+```
+LEDGER/
+├── index.json           <- unchanged role: what build-dashboard reads to render. Generated only.
+├── index-fragments/
+│   ├── login.json         <- only commits to "login" touch this
+│   ├── authentication.json
+│   └── payment.json
+```
+
+- Every `commit-*` command reads/writes **only its own feature's fragment**, never a shared file — two people committing to different features touch different files, so git sees no conflict, ever, regardless of timing.
+- `build-dashboard` is the only command that reads across all fragments and aggregates them into `index.json` — an extension of what it already does for `index.html`, not a new step in the workflow.
+- Read performance for the dashboard is unaffected; only the write path changed.
 
 ---
 
@@ -252,21 +311,19 @@ AI-powered commands call a single internal interface (`AIProvider.generate(promp
 | `new-version <feature>` | Starts a new version (revision pass) for a feature. |
 | `log-error <feature> ["description"]` | Logs a new, open error entry for a feature (§4.6). Piped input is captured automatically; otherwise uses the description or opens an empty entry. |
 | `resolve-error <feature> ["fix note"] [--id <n>] [--agent]` | Appends a fix to the most recent open error entry (or a specific one via `--id`), marking it resolved. `--agent` marks attribution as `ai` (AI-agent-invoked); its absence means `person`. |
-| `build-dashboard` | Regenerates `index.html` from `LEDGER/index.json`. |
+| `build-dashboard` | Aggregates all `index-fragments/*.json` into `LEDGER/index.json` (§8.1), then regenerates `index.html` from it — includes the List/Graph toggle (§8) and the Integration Tests auto-section (§4.7). |
 
 ---
 
 ## 12. Open Questions / Deferred Scope
 
 - Whether a feature's manual test checklist completion status surfaces in the dashboard.
-- Formal cross-feature dependency modeling and drift detection between `architecture.md` and actual implementation — `architecture.md` (§7) now gives this reasoning a home, but doesn't model dependencies or detect drift.
-- How integration tests / cross-feature concerns are represented.
-- Team collaboration — concurrent edits to `index.json`, per-person (not just person/ai) attribution, shared understanding across multiple contributors, and whether `index.html` should be `.gitignore`d as a generated artifact (currently committed as-is; revisit alongside this). Deliberately unaddressed until real multi-person use surfaces what actually breaks (raised, not yet designed).
+- **Team collaboration, still open:** shared understanding across multiple contributors (attribution now shows *who*, per §5, but doesn't address whether each person actually understood what they committed), and whether `index.html` should be `.gitignore`d as a generated artifact (currently committed as-is). Deliberately unaddressed until real multi-person use surfaces what actually breaks.
 - Generalization of the method beyond coding (research, data science, project management).
-- Degree-of-collaboration attribution scoring via before/after diffs, and scoring based on full `brain-dump.md` round history rather than just its latest state — both deferred until there's a clearer need/use case.
+- Degree-of-collaboration attribution scoring via before/after diffs, and scoring based on full `brain-dump.md`/`sketch.md`/`test-outline.md` round history rather than just the latest state — deferred until there's a clearer need/use case.
 - Per-step AI provider configuration, and adapters for providers beyond Claude.
 - Whether `draft code` should show a short outline/preview of planned code structure before writing full implementation.
-- **(Inferred, needs confirmation)** Whether `code/sketch.md` should persist sketches the same way `brain-dump.md` persists Logic input — applied here by analogy, not explicitly discussed for Code.
-- **(Inferred, needs confirmation)** Whether edits to `test-outline.md` should follow the same round-labeled convention as `brain-dump.md`, or just be freely re-edited.
-- Upgrading annotation matching (§6.6) from textual to semantic/conceptual.
+- Upgrading annotation matching (§6.6) from textual to semantic/conceptual — this also affects the dependency safety net in §4.8, which relies on the same textual matching.
+- Overlaying *actual* Code-level dependencies against *declared* ones (§4.8) once real static analysis exists.
+- A terminal-only `deps <feature>` command (§4.8) was cut in favor of the dashboard's graph toggle alone — worth reconsidering only if checking the dashboard mid-coding turns out to be real, repeated friction in practice.
 - Additional comprehension-verification mechanisms discussed but not committed: trusted/standard vs. core-logic marking with a different comprehension bar; tracking concepts the user has demonstrated understanding of over time; AI-generated comprehension questions after a step is drafted. Deliberately not built yet — the author wants to first test whether the Logic-first flow, code annotations, and the test checklist together resolve the comprehension gap before adding more machinery.

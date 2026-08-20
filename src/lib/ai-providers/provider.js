@@ -54,3 +54,8 @@ export function getProvider() {
 export function _setProviderForTesting(provider) {
   cached = provider;
 }
+
+/** The model/provider identifier (§5) that produced the most recent generate() call, if known. */
+export function getLastAiModel() {
+  return getProvider().lastModel || null;
+}

@@ -1,15 +1,17 @@
 import path from 'node:path';
-import { findProjectRoot, indexFile } from '../lib/paths.js';
-import { loadIndex, saveIndex } from '../lib/index-store.js';
+import { findProjectRoot, fragmentFile } from '../lib/paths.js';
+import { loadAllFeatures, saveFeature } from '../lib/index-store.js';
 import { stageAndCommit } from '../lib/git.js';
+import { buildDashboard } from './buildDashboard.js';
 
+/** Omitting `newName` ungroups every feature currently tagged `oldName`, same convention as set-group. */
 export async function renameGroup(oldName, newName) {
-  if (!oldName || !newName) {
-    throw new Error('Usage: ledger rename-group <old-group-name> <new-group-name>');
+  if (!oldName) {
+    throw new Error('Usage: ledger rename-group <old-group-name> [<new-group-name>]');
   }
 
-  const index = loadIndex();
-  const affected = Object.entries(index.features)
+  const all = loadAllFeatures();
+  const affected = Object.entries(all)
     .filter(([, f]) => f.group === oldName)
     .map(([slug]) => slug);
 
@@ -18,16 +20,20 @@ export async function renameGroup(oldName, newName) {
     return;
   }
 
-  for (const slug of affected) {
-    index.features[slug].group = newName;
-  }
-  saveIndex(index);
-
   const root = findProjectRoot();
-  const sha = stageAndCommit(
-    [path.relative(root, indexFile())],
-    `chore(ledger): rename-group ${oldName} -> ${newName}`
-  );
+  const relPaths = [];
+  for (const slug of affected) {
+    all[slug].group = newName || null;
+    saveFeature(slug, all[slug]);
+    relPaths.push(path.relative(root, fragmentFile(slug)));
+  }
 
-  console.log(`Retagged ${affected.length} feature(s) (${affected.join(', ')}). Committed ${sha.slice(0, 12)}.`);
+  const sha = stageAndCommit(relPaths, `chore(ledger): rename-group ${oldName} -> ${newName || '(none)'}`);
+
+  console.log(
+    newName
+      ? `Retagged ${affected.length} feature(s) (${affected.join(', ')}) to "${newName}". Committed ${sha.slice(0, 12)}.`
+      : `Ungrouped ${affected.length} feature(s) (${affected.join(', ')}) previously tagged "${oldName}". Committed ${sha.slice(0, 12)}.`
+  );
+  await buildDashboard();
 }

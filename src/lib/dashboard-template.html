@@ -49,6 +49,7 @@
   .step-btn { display: flex; align-items: center; justify-content: space-between; border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; background: var(--bg); text-decoration: none; color: var(--fg); font-size: 0.8rem; }
   .step-btn .step-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-left: 6px; }
   .no-pipeline { font-size: 0.8rem; color: var(--muted); font-style: italic; }
+  .historical-hint { font-size: 0.7rem; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 
   .paths { font-size: 0.75rem; color: var(--muted); margin: 0 0 0.6rem; }
   .paths a { color: var(--ai); text-decoration: none; }
@@ -79,14 +80,20 @@
   <p class="generated" id="generatedNote"></p>
 
   <div class="toolbar">
-    <input type="text" id="search" placeholder="Search features...">
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <input type="text" id="search" placeholder="Search features...">
+      <div id="viewToggle" style="display:flex; border:1px solid var(--border); border-radius:6px; overflow:hidden;">
+        <button id="viewList" style="border:none; padding:0.35rem 0.7rem; font-size:0.8rem; cursor:pointer; background:var(--accent-bg); color:var(--accent-fg);">List</button>
+        <button id="viewGraph" style="border:none; padding:0.35rem 0.7rem; font-size:0.8rem; cursor:pointer; background:var(--bg); color:var(--fg);">Graph</button>
+      </div>
+    </div>
     <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
-      <div class="legend">
+      <div class="legend" id="legendRow">
         <span><span class="dot" style="background:var(--person)"></span>person</span>
         <span><span class="dot" style="background:var(--ai)"></span>ai</span>
         <span><span class="dot" style="background:var(--none)"></span>not set</span>
       </div>
-      <label><input type="checkbox" id="showRemoved"> Show removed</label>
+      <label id="showRemovedLabel"><input type="checkbox" id="showRemoved"> Show removed</label>
     </div>
   </div>
 
@@ -94,12 +101,13 @@
   <p class="empty-note" id="emptyNote" style="display:none;">No features match your search.</p>
 
 <script>
+/* Data shape: see docs/ledger-dashboard-template.html in The-Notes-Method repo (source of
+   truth for the shape reference) — injected here by `ledger build-dashboard` from
+   LEDGER/index.json. Do not hand-edit this file, it's regenerated on every build. */
 const LEDGER_DATA = /*__LEDGER_DATA__*/;
 
 /* =========================================================================
-   RENDERING LOGIC — reusable as-is. Fed by LEDGER_DATA above, injected by
-   `ledger build-dashboard` from LEDGER/index.json. Do not hand-edit this file
-   — it's regenerated on every build-dashboard run.
+   RENDERING LOGIC — reusable as-is.
    ========================================================================= */
 
 const DOT_COLOR = { person: "var(--person)", ai: "var(--ai)", legacy: "var(--none)", none: "var(--none)" };
@@ -117,6 +125,12 @@ function stepCountLabel(feature) {
   return done + " / " + feature.steps.length + " steps · v" + v.version;
 }
 
+function identityLabel(sd) {
+  if (!sd.attribution) return "";
+  const who = Array.isArray(sd.identity) ? sd.identity.join(", ") : sd.identity;
+  return sd.attribution + (who ? " · " + who : "");
+}
+
 function renderStepGrid(feature, version) {
   if (!feature.pipelineSet) {
     return '<p class="no-pipeline">Step pipeline not yet locked in — run <code>ledger list-steps ' + feature.slug + '</code>.</p>';
@@ -125,9 +139,16 @@ function renderStepGrid(feature, version) {
     const sd = (version && version.stepData[step]) || {};
     const color = sd.attribution ? DOT_COLOR[sd.attribution] : DOT_COLOR.none;
     const inner = '<span>' + STEP_LABEL(step) + '</span><span class="step-dot" style="background:' + color + '"></span>';
-    return sd.fileUrl
-      ? '<a class="step-btn" href="' + sd.fileUrl + '">' + inner + '</a>'
-      : '<span class="step-btn" style="opacity:0.6; cursor:default;">' + inner + '</span>';
+    const title = identityLabel(sd) ? ' title="' + identityLabel(sd) + '"' : "";
+    if (sd.fileUrl) {
+      return '<a class="step-btn" href="' + sd.fileUrl + '"' + title + '>' + inner + '</a>';
+    }
+    if (sd.historicalHint) {
+      // No locally-archived file for this past version (§6.3) — offer the exact
+      // command to view it instead of a dead link.
+      return '<span class="step-btn" style="opacity:0.75; cursor:default; flex-direction:column; align-items:flex-start; gap:2px;"' + title + '>' + inner + '<code class="historical-hint">' + sd.historicalHint + '</code></span>';
+    }
+    return '<span class="step-btn" style="opacity:0.6; cursor:default;"' + title + '>' + inner + '</span>';
   }).join("");
   return '<div class="step-grid">' + cells + '</div>';
 }
@@ -152,7 +173,7 @@ function renderErrorsSection(feature) {
       ? '<span class="status-open">Open</span>'
       : '<span class="status-resolved">Resolved</span>';
     const fixHtml = e.status === "resolved"
-      ? '<p class="fix"><span class="fix-dot" style="background:' + (DOT_COLOR[e.attribution] || DOT_COLOR.none) + '"></span>' + e.fixNote + '</p>'
+      ? '<p class="fix"><span class="fix-dot" style="background:' + (DOT_COLOR[e.attribution] || DOT_COLOR.none) + '"></span>' + e.fixNote + (identityLabel(e) ? ' <span style="color:var(--muted);">(' + identityLabel(e) + ')</span>' : '') + '</p>'
       : '<p class="fix" style="font-style:italic;">Not yet resolved.</p>';
     return (
       '<div class="error-entry">' +
@@ -176,6 +197,9 @@ function renderFeature(feature) {
   const paths = feature.codePaths.length
     ? '<p class="paths">' + feature.codePaths.map(p => '<a href="' + p + '">' + p + '</a>').join(' <span style="color:var(--border)">·</span> ') + '</p>'
     : "";
+  const libraries = (feature.libraries || []).length
+    ? '<p class="paths" style="margin-top:2px;">Libraries: ' + feature.libraries.join(", ") + '</p>'
+    : "";
   return (
     '<div class="feature' + (feature.removed ? ' removed' : '') + '" data-slug="' + feature.slug + '" data-search="' + (feature.name + " " + feature.slug + " " + feature.description).toLowerCase() + '">' +
       '<div class="feature-head">' +
@@ -186,8 +210,55 @@ function renderFeature(feature) {
       renderVersionChips(feature) +
       renderStepGrid(feature, v) +
       paths +
+      libraries +
       renderErrorsSection(feature) +
     '</div>'
+  );
+}
+
+function renderGraph(data) {
+  const features = data.features.filter(f => !f.removed);
+  const size = 560, cx = size / 2, cy = size / 2, radius = size / 2 - 70;
+  const n = features.length;
+  const positioned = features.map((f, i) => {
+    const angle = (2 * Math.PI * i) / n - Math.PI / 2;
+    return Object.assign({}, f, { x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) });
+  });
+  const posBySlug = {};
+  positioned.forEach(p => { posBySlug[p.slug] = p; });
+
+  let edgesSvg = "";
+  positioned.forEach(f => {
+    (f.dependsOn || []).forEach(depSlug => {
+      const target = posBySlug[depSlug];
+      if (!target) return;
+      edgesSvg += '<line x1="' + f.x + '" y1="' + f.y + '" x2="' + target.x + '" y2="' + target.y +
+        '" stroke="#3b82f6" stroke-width="1.5" opacity="0.7" marker-end="url(#arrow)"></line>';
+    });
+  });
+
+  const nodesSvg = positioned.map(f => {
+    const isIntegration = f.pipelineSet && Array.isArray(f.steps) && !f.steps.includes("code");
+    const fill = isIntegration ? "var(--none)" : "var(--card)";
+    const label = f.name.length > 14 ? f.name.slice(0, 13) + "…" : f.name;
+    return (
+      '<g>' +
+        '<circle cx="' + f.x + '" cy="' + f.y + '" r="28" style="fill:' + fill + '; stroke:var(--border); stroke-width:1;"></circle>' +
+        '<text x="' + f.x + '" y="' + (f.y + 4) + '" text-anchor="middle" font-size="9.5" style="fill:var(--fg);">' + label + '</text>' +
+      '</g>'
+    );
+  }).join("");
+
+  if (n === 0) {
+    return '<p class="empty-note">No features to graph yet.</p>';
+  }
+
+  return (
+    '<svg viewBox="0 0 ' + size + ' ' + size + '" style="width:100%; max-width:560px; display:block; margin:0 auto;">' +
+      '<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#3b82f6"></path></marker></defs>' +
+      edgesSvg + nodesSvg +
+    '</svg>' +
+    '<p style="text-align:center; font-size:0.78rem; color:var(--muted); margin-top:8px;">Arrows point from a feature to what it depends on. Gray nodes are integration-test pseudo-features (§4.7).</p>'
   );
 }
 
@@ -197,11 +268,20 @@ function renderDashboard(data) {
 
   const groups = {};
   data.features.forEach(f => {
-    const key = f.group || "Ungrouped";
+    // A feature with no "code" step is an integration-test pseudo-feature (§4.7) —
+    // detected from its declared step pipeline, not a self-reported tag.
+    const isIntegration = f.pipelineSet && Array.isArray(f.steps) && !f.steps.includes("code");
+    const key = isIntegration ? "Integration Tests" : (f.group || "Ungrouped");
     (groups[key] = groups[key] || []).push(f);
   });
 
-  const groupNames = Object.keys(groups).sort((a, b) => a === "Ungrouped" ? 1 : b === "Ungrouped" ? -1 : a.localeCompare(b));
+  const groupNames = Object.keys(groups).sort((a, b) => {
+    if (a === "Integration Tests") return 1;
+    if (b === "Integration Tests") return -1;
+    if (a === "Ungrouped") return 1;
+    if (b === "Ungrouped") return -1;
+    return a.localeCompare(b);
+  });
   const html = groupNames.map(g =>
     '<div class="group-label">' + g + '</div>' + groups[g].map(renderFeature).join("")
   ).join("");
@@ -260,7 +340,34 @@ function applyFilters() {
 document.getElementById("search").addEventListener("input", applyFilters);
 document.getElementById("showRemoved").addEventListener("change", applyFilters);
 
-renderDashboard(LEDGER_DATA);
+let currentView = "list";
+
+function setView(view) {
+  currentView = view;
+  const listBtn = document.getElementById("viewList");
+  const graphBtn = document.getElementById("viewGraph");
+  const activeStyle = "border:none; padding:0.35rem 0.7rem; font-size:0.8rem; cursor:pointer; background:var(--accent-bg); color:var(--accent-fg);";
+  const inactiveStyle = "border:none; padding:0.35rem 0.7rem; font-size:0.8rem; cursor:pointer; background:var(--bg); color:var(--fg);";
+  listBtn.style.cssText = view === "list" ? activeStyle : inactiveStyle;
+  graphBtn.style.cssText = view === "graph" ? activeStyle : inactiveStyle;
+
+  const isList = view === "list";
+  document.getElementById("search").style.display = isList ? "" : "none";
+  document.getElementById("showRemovedLabel").style.display = isList ? "" : "none";
+  document.getElementById("legendRow").style.display = isList ? "" : "none";
+  document.getElementById("emptyNote").style.display = "none";
+
+  if (isList) {
+    renderDashboard(LEDGER_DATA);
+  } else {
+    document.getElementById("app").innerHTML = renderGraph(LEDGER_DATA);
+  }
+}
+
+document.getElementById("viewList").addEventListener("click", () => setView("list"));
+document.getElementById("viewGraph").addEventListener("click", () => setView("graph"));
+
+setView("list");
 </script>
 </body>
 </html>
