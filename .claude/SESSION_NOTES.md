@@ -3,6 +3,14 @@
 Working log for picking up where a prior session left off. Static project facts belong in
 `CLAUDE.md` instead — keep this file to state that actually changes over time.
 
+## 2026-08-20 — user off to test v3 on a real project
+
+- User is now going to test v3 (fragment-sharded storage, identity capture, cross-feature
+  dependencies, `fix-error`, JOURNAL rename) on a real project, following
+  `docs/v3-testing-guide.md`, and will fill in `docs/v3-feedback.md` (currently blank) while doing
+  so. **Next session should start by reading `docs/v3-feedback.md`** for what came up, same
+  pattern as the v1→v2 and v2→v3 feedback loops.
+
 ## 2026-08-20 — v3 features + rename to JOURNAL
 
 - User filled in `docs/v2-feedback.md` from real dogfooding (a Sudoku project) and separately
