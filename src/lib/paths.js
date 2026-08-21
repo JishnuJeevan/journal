@@ -61,16 +61,28 @@ export function errorsFile(feature) {
   return path.join(featureDir(feature), 'errors', 'errors.md');
 }
 
-export function diagnosisFile(feature) {
-  return path.join(featureDir(feature), 'errors', 'diagnosis.md');
+export function fixPlanFile(feature) {
+  return path.join(featureDir(feature), 'errors', 'fix-plan.md');
+}
+
+export function srsDir() {
+  return path.join(journalRoot(), 'SRS');
+}
+
+export function srsBrainDumpFile() {
+  return path.join(srsDir(), 'brain-dump.md');
+}
+
+export function srsFeaturesFile() {
+  return path.join(srsDir(), 'features.md');
 }
 
 export function styleFile() {
-  return path.join(journalRoot(), 'style.md');
+  return path.join(srsDir(), 'style.md');
 }
 
 export function architectureFile() {
-  return path.join(journalRoot(), 'architecture.md');
+  return path.join(srsDir(), 'architecture.md');
 }
 
 export function indexFile() {

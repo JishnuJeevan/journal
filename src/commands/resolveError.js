@@ -29,8 +29,11 @@ export async function resolveError(feature, fixNote, opts = {}) {
   }
 
   const root = findProjectRoot();
-  const attribution = opts.agent ? 'ai' : 'person';
-  const identity = attribution === 'person' ? gitUserName(root) : null;
+  // §4.6: not declared here — inherited from whichever origin the fix-plan had (fix-error's
+  // attribution), same "reflects who did the thinking" rule Code follows (§4.2). No fix-plan
+  // on record (resolved by hand, without ever running fix-error) falls back to `person`.
+  const attribution = target.fixPlanAttribution || 'person';
+  const identity = attribution === 'person' ? gitUserName(root) : target.fixPlanIdentity || null;
   const resolvedDate = new Date().toISOString();
   target.status = 'resolved';
   target.fixNote = fixNote || '';

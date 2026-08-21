@@ -15,7 +15,7 @@ export async function listSteps(feature, opts = {}) {
   if (!featureExists(feature)) {
     if (!opts.description) {
       throw new Error(
-        `Unknown feature "${feature}". Register it first with \`journal list-features\`, ` +
+        `Unknown feature "${feature}". Register it first with \`journal draft-features\`/\`journal commit-features\`, ` +
           `or create it inline with \`journal list-steps ${feature} --description "..."\`.`
       );
     }

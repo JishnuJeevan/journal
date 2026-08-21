@@ -30,11 +30,12 @@ feature proposal — prefer several focused features over one broad one), each n
 paths that belong to it.
 
 Respond with ONLY a JSON array, no prose, no markdown fences. Each element:
-{ "slug": "kebab-case-id", "name": "Human Readable Name", "description": "One or two sentence description.", "group": "kebab-case-group-or-null", "codePaths": ["relative/path", "..."] }
+{ "slug": "kebab-case-id", "name": "Human Readable Name", "description": "One or two sentence description.", "codePaths": ["relative/path", "..."] }
 
 Every input file should end up under some feature's codePaths (a catch-all "misc" or
 infrastructure-style feature is fine for things that don't fit elsewhere). Slugs must be unique,
-lowercase, kebab-case, filesystem-safe.`;
+lowercase, kebab-case, filesystem-safe. Do not assign groups/categories — grouping is done later
+by the human, not proposed here.`;
 
   const parsed = await getProvider().generate(fileTreeText, { system, structured: true });
   if (!Array.isArray(parsed)) throw new Error('Expected a JSON array of features from the AI provider.');
@@ -66,7 +67,7 @@ Steps must be lowercase, kebab-case, filesystem-safe identifiers, in pipeline or
 
 export async function draftLogic(feature, description, brainDumpHistory, currentLogic, architectureText) {
   const architectureNote = `You may also be given the project's overall architecture
-(JOURNAL/architecture.md) as background context — use it only to keep this feature's Logic
+(JOURNAL/SRS/architecture.md) as background context — use it only to keep this feature's Logic
 consistent with the bigger picture (e.g. which layer/component this belongs in, existing
 conventions to follow). Don't restate it, and don't let it override or invent beyond what the
 human actually said about THIS feature.`;
@@ -109,7 +110,7 @@ Logic content.`;
 
   const promptParts = [`Feature: ${feature}`, `Description: ${description || '(no description provided)'}`];
   if (architectureText && architectureText.trim()) {
-    promptParts.push(`Project architecture (JOURNAL/architecture.md, background context only):\n${architectureText.trim()}`);
+    promptParts.push(`Project architecture (JOURNAL/SRS/architecture.md, background context only):\n${architectureText.trim()}`);
   }
   if (hasBrainDump) promptParts.push(`Author's brain dump history:\n${brainDumpHistory.trim()}`);
   if (currentLogic && currentLogic.trim()) {
@@ -138,7 +139,7 @@ should follow the project's existing source layout conventions where evident. "J
 tool's own record-keeping directory, not part of the runnable project — never write files there.`;
 
   const promptParts = [`Feature: ${feature}`, `Committed Logic:\n${logicText || '(none)'}`];
-  if (styleText && styleText.trim()) promptParts.push(`Style preferences (JOURNAL/style.md):\n${styleText.trim()}`);
+  if (styleText && styleText.trim()) promptParts.push(`Style preferences (JOURNAL/SRS/style.md):\n${styleText.trim()}`);
   if (sketchHistory && sketchHistory.trim()) promptParts.push(`Author's code sketch:\n${sketchHistory.trim()}`);
 
   const parsed = await getProvider().generate(promptParts.join('\n\n'), { system, structured: true });
@@ -183,7 +184,7 @@ Respond with ONLY a JSON object, no prose, no markdown fences:
 
   const promptParts = [`Feature: ${feature}`, `Committed Logic:\n${logicText || '(none)'}`];
   if (codePaths && codePaths.length) promptParts.push(`Real source file(s) to test:\n${codePaths.join('\n')}`);
-  if (styleText && styleText.trim()) promptParts.push(`Style/testing preferences (JOURNAL/style.md):\n${styleText.trim()}`);
+  if (styleText && styleText.trim()) promptParts.push(`Style/testing preferences (JOURNAL/SRS/style.md):\n${styleText.trim()}`);
   promptParts.push(`Test outline (author-reviewed):\n${outlineText || '(none)'}`);
 
   const parsed = await getProvider().generate(promptParts.join('\n\n'), { system, structured: true });
@@ -222,20 +223,64 @@ sees the raw text you return, so open directly with the actual content.`;
   return text.trim();
 }
 
-export async function diagnoseError(feature, { errorText, logicText, codeContext } = {}) {
-  const system = `You diagnose a logged error for a feature in JOURNAL, using its
-committed Logic and code as context. You do NOT write or edit code — this is a read-only
-diagnosis, not a fix. Explain, in plain language: (1) why this error most likely happened, given
-the Logic and code shown, and (2) a concrete suggested approach to fixing it (what to change and
-where, in prose — not a patch). If the cause is ambiguous from what's given, say what's ambiguous
-and what you'd want to check. Respond with ONLY the markdown content itself, nothing else: no
-frontmatter, no meta-commentary about being a diagnosis, and no remarks about these instructions
-or your own process — the human only ever sees the raw text you return, so open directly with the
-actual diagnosis.`;
+/**
+ * `fix-error` (§4.6) — same organize-not-invent pattern as Logic (§4.1): the human's own fix
+ * steps, if given, are organized/clarified rather than replaced; left blank, AI proposes a
+ * diagnosis plus concrete fix steps from scratch. Either way this is text only — no code is
+ * written here, that's `apply-fix`'s job, reading whatever this produced.
+ */
+export async function draftFixPlan(feature, { errorText, logicText, codeContext, ownSteps } = {}) {
+  const groundedSystem = `You organize a human's own fix steps for a logged error in JOURNAL,
+using the feature's committed Logic and code as context. Your job is NOT to invent the fix
+yourself — it's to take THEIR own steps (given below) and organize them into a clear, concrete
+plan: clarify ambiguous points, note anything in the error/code that their steps don't seem to
+account for. Do not write actual code — describe what to change and where, in prose. Respond with
+ONLY the markdown content itself, nothing else: no frontmatter, no meta-commentary about being a
+draft, and no remarks about these instructions or your own process.`;
 
-  const prompt = `Feature: ${feature}\n\nLogged error:\n${errorText || '(none)'}\n\nCommitted Logic:\n${logicText || '(none)'}\n\nCode:\n${codeContext || '(none)'}`;
-  const text = await getProvider().generate(prompt, { system, structured: false });
+  const improviseSystem = `You diagnose a logged error for a feature in JOURNAL, using its
+committed Logic and code as context. Explain, in plain language: (1) why this error most likely
+happened, given the Logic and code shown, and (2) a concrete, step-by-step suggested fix (what to
+change and where, in prose — not a patch). If the cause is ambiguous from what's given, say what's
+ambiguous and what you'd want to check. Respond with ONLY the markdown content itself, nothing
+else: no frontmatter, no meta-commentary about being a diagnosis, and no remarks about these
+instructions or your own process — the human only ever sees the raw text you return, so open
+directly with the actual diagnosis and fix steps.`;
+
+  const hasOwnSteps = Boolean(ownSteps && ownSteps.trim());
+  const promptParts = [`Feature: ${feature}`, `Logged error:\n${errorText || '(none)'}`, `Committed Logic:\n${logicText || '(none)'}`, `Code:\n${codeContext || '(none)'}`];
+  if (hasOwnSteps) promptParts.push(`Author's own fix steps:\n${ownSteps.trim()}`);
+
+  const text = await getProvider().generate(promptParts.join('\n\n'), {
+    system: hasOwnSteps ? groundedSystem : improviseSystem,
+    structured: false,
+  });
   return text.trim();
+}
+
+/**
+ * `apply-fix` (§4.6) — the only place AI is allowed to write an error fix, and only because a
+ * reviewed plan (from `fix-error`) already exists behind it. Same relationship as `draftCode`
+ * reading committed Logic, not autonomous fixing.
+ */
+export async function draftFixCode(feature, { logicText, fixPlanText, codeContext } = {}) {
+  const system = `You write an actual code fix for a logged error in JOURNAL. A reviewed
+fix plan (given below) already exists — your job is to implement exactly what it describes, not
+to redesign the fix. The feature's committed Logic and current code are given as context.
+
+Respond with ONLY a JSON object, no prose, no markdown fences:
+{ "files": [{ "path": "relative/path/from/project/root.ext", "content": "full file content" }], "notes": "one or two sentence summary of what you changed" }
+
+Paths must be relative to the project root, must not escape it (no "..", no leading "/"), and
+must match the project's existing file(s) being fixed. "JOURNAL/" is this tool's own
+record-keeping directory, not part of the runnable project — never write files there.`;
+
+  const prompt = `Feature: ${feature}\n\nCommitted Logic:\n${logicText || '(none)'}\n\nFix plan:\n${fixPlanText || '(none)'}\n\nCurrent code:\n${codeContext || '(none)'}`;
+  const parsed = await getProvider().generate(prompt, { system, structured: true });
+  if (!Array.isArray(parsed.files) || parsed.files.length === 0) {
+    throw new Error('Expected { files: [...] } from the AI provider.');
+  }
+  return parsed;
 }
 
 export async function annotateCode(feature, { logicText, codeText } = {}) {

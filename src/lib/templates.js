@@ -59,10 +59,13 @@ function existingRoundNumbers(content) {
  * brain-dump.md/sketch.md exist from the start, ready to write a large round into
  * directly rather than only via a CLI string argument.
  */
-export function ensureRoundFile(file, { feature, step, version }) {
+export function ensureRoundFile(file, meta = {}) {
   if (fs.existsSync(file)) return false;
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, matter.stringify('', { feature, step, version }), 'utf8');
+  // js-yaml can't dump `undefined` — drop any key not actually given (e.g. a project-level
+  // round file has no feature/step, only logic/code/etc. round files do).
+  const data = Object.fromEntries(Object.entries(meta).filter(([, v]) => v !== undefined));
+  fs.writeFileSync(file, matter.stringify('', data), 'utf8');
   return true;
 }
 
@@ -98,6 +101,26 @@ export function hasContent(file) {
 export function readOrEmpty(file) {
   if (!fs.existsSync(file)) return '';
   return matter(fs.readFileSync(file, 'utf8')).content;
+}
+
+/**
+ * Reads `file` (style.md/architecture.md) and, if `group` names an existing `## <group>`
+ * heading section, appends that section again clearly labeled as a component-specific
+ * override (§7) — most projects only have the global rules at the top, so this is a no-op
+ * for them. `group` doubles as "component" here: JOURNAL has no separate component concept,
+ * and a feature's group tag is the closest existing per-feature categorization.
+ */
+export function readWithComponentOverride(file, group) {
+  const full = readOrEmpty(file);
+  if (!group || !full.trim()) return full;
+  // Strip HTML comments first — the shipped style.md/architecture.md stub (init.js) includes
+  // an example "## <group-name>" heading inside one as instructional boilerplate, which would
+  // otherwise collide with a real section of the same name (e.g. the stub's own suggested
+  // example, "backend").
+  const stripped = full.replace(/<!--[\s\S]*?-->/g, '');
+  const match = stripped.match(new RegExp(`^##\\s+${group}\\s*$([\\s\\S]*?)(?=^##\\s|(?![\\s\\S]))`, 'im'));
+  if (!match) return full;
+  return `${full.trim()}\n\n---\n\nComponent-specific notes for "${group}":\n\n${match[1].trim()}\n`;
 }
 
 /** Archives `file` to `<name>.v<version>.md` alongside it, if it exists and has content — used by new-version (§4.1's "fresh start" for brain-dump.md/sketch.md, preserving rather than erasing prior rounds). */

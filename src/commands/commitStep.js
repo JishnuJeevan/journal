@@ -4,12 +4,13 @@ import { execSync } from 'node:child_process';
 import prompts from 'prompts';
 import {
   findProjectRoot, stepFile, stepDir, brainDumpFile, sketchFile, codeAnnotationsFile,
-  testOutlineFile, testFile, fragmentFile, configFile,
+  testOutlineFile, testFile, fragmentFile, configFile, errorsFile,
 } from '../lib/paths.js';
 import { loadFeature, saveFeature, getCurrentVersion, listFeatureSlugs, loadAllFeatures } from '../lib/index-store.js';
 import { stageAndCommit, commitAuthorName } from '../lib/git.js';
 import { readStepFile, writeStepFile } from '../lib/frontmatter.js';
 import { hasContent, appendNote } from '../lib/templates.js';
+import { openErrorEntry, appendErrorBlock } from '../lib/errorLog.js';
 import { contentHash, hashOfFiles } from '../lib/hash.js';
 import { loadConfig, saveConfig } from '../lib/ai-providers/provider.js';
 import { checkLogicIntegrity } from '../lib/logicIntegrity.js';
@@ -212,9 +213,31 @@ export async function commitStep(step, feature, opts = {}) {
 
     console.log(`Running: ${testCommand}`);
     try {
-      execSync(testCommand, { cwd: root, stdio: 'inherit' });
-    } catch {
-      throw new Error(`Automated tests failed ("${testCommand}") — fix them before committing test.`);
+      const output = execSync(testCommand, { cwd: root, encoding: 'utf8', stdio: ['inherit', 'pipe', 'pipe'] });
+      process.stdout.write(output);
+    } catch (err) {
+      const output = (err.stdout || '') + (err.stderr || '');
+      process.stdout.write(output);
+
+      // §4.6: a real test *failure* (not an unchecked manual item) auto-opens an error entry —
+      // the tool already has the failing output right here, no need to make the user notice
+      // the failure and separately run `log-error` themselves.
+      const record = openErrorEntry(entry, {
+        errorOutput: output || err.message,
+        description: `Automated tests failed during \`journal commit test ${feature}\` ("${testCommand}").`,
+      });
+      saveFeature(feature, entry);
+      appendErrorBlock(feature, record);
+      stageAndCommit(
+        [path.relative(root, errorsFile(feature)), path.relative(root, fragmentFile(feature))],
+        `chore(journal): auto-log error #${record.id} for ${feature} (test failure)`
+      );
+
+      throw new Error(
+        `Automated tests failed ("${testCommand}") — auto-logged as error #${record.id}. ` +
+          `Plan a fix with \`journal fix-error ${feature} --id ${record.id}\`, apply it with ` +
+          `\`journal apply-fix ${feature} --id ${record.id}\`, then retry \`journal commit test ${feature}\`.`
+      );
     }
 
     const tFile = testFile(feature);

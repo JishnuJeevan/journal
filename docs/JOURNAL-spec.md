@@ -8,20 +8,19 @@
 
 AI-assisted coding has made it easy to generate working software without engaging with, or understanding, the code that was produced. This creates a specific failure mode: when something breaks, the person who "wrote" the software cannot debug it, because they never actually understood it in the first place.
 
-JOURNAL is a CLI tool built around a specific discipline for staying engaged with AI-assisted development, designed around four principles:
+**JOURNAL is spec-driven development, but atomic and active.** Where most spec-driven approaches work off one broad, project-level spec, JOURNAL breaks a project into small, individually-versioned features — each with its own spec (Logic), written before its code, with a pipeline of steps that can flex per feature (§4.5) rather than a single fixed shape. And unlike a spec that's written once and left to go stale, JOURNAL actively checks that code stays honest to it as things change — drift detection (§6.5) catches silent divergence, Test's checklist requires explicit confirmation rather than assumption (§4.3), and the error-fix lifecycle keeps a reviewable plan in the loop even in the one place AI is allowed to write a fix (§4.6).
 
-1. **Engagement** — the person building the software must actively participate in each stage, not just approve AI output.
-2. **Understanding** — the person must understand the code and the logic behind it, not just see that it runs.
-3. **Provenance** — a record of how each piece of work was produced (human-originated vs. AI-originated), detected automatically from tool usage rather than self-reported.
-4. **Friction against blind acceptance** — the workflow should discourage reflexively clicking "yes" to AI suggestions without engagement.
+Three things this actually does, stated plainly rather than as a pitch:
 
-This is explicitly **not** a tool for people who want to vibe-code faster, or who run many autonomous agents in parallel to ship quickly. It is for people who want a structured, incremental way to stay engaged with AI-assisted development, and to have a durable record of how a piece of software actually came to be.
+1. **Atomic, feature-level specs.** Each feature gets its own Logic, written before its Code — not one project-wide document, and not something reverse-engineered as documentation after the fact.
+2. **Active verification, not passive logging.** The tool checks, gates, and flags — it doesn't just keep a record and hope it's read.
+3. **Provenance, kept for diagnosis.** Every step and every fix automatically records how it was produced (person, AI, or legacy — §5) and, for a fix specifically, whose plan it came from (§4.6). This exists because knowing who or what touched a piece of code is genuinely useful information when it breaks later.
 
-A core workflow principle that runs through this whole method: **features are defined before code is written**, **Logic is defined before Code is written**, and **Logic is defined before Test is written** — each step downstream draws from what was decided upstream, never the reverse (except through the explicit drift-flagging mechanism in §6.5, which surfaces divergence rather than silently allowing it).
+**Who this is for.** Not for people who want to vibe-code faster or run many autonomous agents in parallel — `apply-fix` requiring a reviewed plan first is a step down in convenience from AI just fixing things outright, not an upgrade. It's for people who want a structured, incremental way to stay engaged with AI-assisted development, with the overhead worth paying for features that matter and will be revisited — not a one-off throwaway script.
+
+A core workflow principle that runs through this whole tool: **features are defined before code is written**, **Logic is defined before Code is written**, and **Logic is defined before Test is written** — each step downstream draws from what was decided upstream, never the reverse (except through the explicit drift-flagging mechanism in §6.5, which surfaces divergence rather than silently allowing it).
 
 **A key lesson from early dogfooding, worth stating explicitly:** the biggest barrier to understanding AI-generated code usually isn't *who* wrote it — it's a mismatch between the code's structure/style and how the person themselves thinks about the problem, and a lack of anything concrete to verify against once code exists. The fixes that emerged from this: let the person provide the *shape* of a solution (via Logic, refined iteratively — §4.1), have Code and Test both derive from that shape rather than inventing their own, and give the person a concrete way to check the result (annotations for unfamiliar code, §6.6; a verification checklist for things that can't be asserted in code, §4.3).
-
-**JOURNAL has quietly become a teaching tool as much as a development tool, worth naming directly.** The clearest example: `fix-error` (§4.6) diagnoses a bug — explains why it likely happened and suggests an approach — but deliberately never writes the fix itself. An error is the moment a person's mental model of the code was wrong; it's arguably the single highest-leverage moment for actual understanding in the whole pipeline, since it's a concrete, specific gap between expectation and reality, not an abstract one. Auto-fixing it would remove exactly that moment. This isn't a one-off design choice — it's the same "AI organizes/explains, the human does the part that produces understanding" pattern used throughout JOURNAL (Logic, Code, Test), applied once more at the debugging stage.
 
 ---
 
@@ -33,9 +32,9 @@ A core workflow principle that runs through this whole method: **features are de
 | **Step** | A stage a feature passes through: **Logic → Code → Test → Document** by default, customizable per feature (§4.5). |
 | **Version** | One complete pass through the step pipeline for a feature. A **new version** starts when a feature changes materially. In the dashboard, each version is displayed as a column, following the original spreadsheet-style design. |
 | **Attribution** | A tag recorded per step, per version, describing how that step's content was produced: **person**, **ai**, or **legacy**. Automatically detected from tool usage (§5) — not self-reported. |
-| **Brain dump** | Free-form input the user provides when drafting a step (raw notes, pseudocode). AI organizes/completes it rather than inventing content from nothing. For Logic, this is an iterative, persistent file (§4.1), not a one-shot input. |
-| **Test outline** | The Test step's analogue of a brain dump — a proposed (then user-editable) list of what should be verified for a feature, split into automatable and manual/visual items (§4.3). |
-| **Group** | An optional label attached to a feature purely for dashboard organization (e.g. `authentication`). Flat tagging, not structural nesting — features stay in `JOURNAL/features/` with no parent/child hierarchy. Assignable by AI (proposed alongside features during `list-features`) or by the user (at `add-feature` time, or retroactively via `set-group`). |
+| **Brain dump** | Free-form input the user provides when drafting a step (raw notes, pseudocode). AI organizes/completes it rather than inventing content from nothing. For Logic, this is an iterative round-file (§4.1) — persistent *within* a version, reset fresh at the start of each new version (§9.2, revised from earlier cross-version-persistent design based on v2 testing — see §4.1). |
+| **Test outline** | The Test step's analogue of a brain dump — a proposed (then user-editable) list of what should be verified for a feature, split into automatable and manual/visual items (§4.3). Same per-version reset as brain dumps. |
+| **Group** | An optional label attached to a feature purely for dashboard organization (e.g. `authentication`). Flat tagging, not structural nesting — features stay in `JOURNAL/features/` with no parent/child hierarchy. **Manually assigned only**, via `add-feature --group` or `set-group` (§9.2) — AI does not auto-propose or auto-assign groups during `draft features`; features start ungrouped by default, based on v2 testing feedback that automatic grouping got in the way rather than helping. |
 
 ---
 
@@ -50,25 +49,29 @@ project-root/
 │   ├── index.json                 <- aggregated data source for the dashboard, generated only (§8.1)
 │   ├── index-fragments/           <- per-feature write targets, avoids multi-user collisions (§6.7, §8.1)
 │   │   └── <feature-slug>.json
-│   ├── style.md                   <- global code style + testing preferences (§7)
-│   ├── architecture.md            <- project-wide system shape, read by draft logic (§7)
+│   ├── config.json                <- project-level settings, e.g. testCommand (§4.3), prompted for lazily on first need
+│   ├── SRS/                       <- project-level requirements, features, style, architecture (§9.2)
+│   │   ├── brain-dump.md           <- project-level brain dump, same append/round convention as a feature's brain-dump.md
+│   │   ├── features.md             <- AI-derived from brain-dump.md, reviewed and committed via `commit features`
+│   │   ├── style.md                <- global code style + testing preferences; optional per-component sections (§7)
+│   │   └── architecture.md         <- project-wide system shape; optional per-component sections (§7)
 │   ├── features/
 │   │   └── feature-x/
 │   │       ├── logic/
-│   │       │   ├── brain-dump.md   <- persistent, append-only history of every round (§4.1)
+│   │       │   ├── brain-dump.md   <- per-version round-file, pre-created empty by list-steps/add-step/new-version (§4.1)
 │   │       │   └── logic.md        <- AI-organized, current committed Logic
 │   │       ├── code/
-│   │       │   ├── sketch.md       <- optional code-level sketch, persists every round like brain-dump.md
+│   │       │   ├── sketch.md       <- per-version round-file, same pre-creation/reset convention as brain-dump.md
 │   │       │   ├── <code snapshot files>
 │   │       │   └── annotations.md  <- unfamiliar-term flags (§6.6)
 │   │       ├── test/
-│   │       │   ├── test-outline.md <- AI-proposed, user-editable test plan (§4.3)
-│   │       │   └── test.md         <- snapshot of the real generated test file(s) + manual checklist
+│   │       │   ├── test-outline.md <- per-version round-file, AI-proposed then user-editable (§4.3)
+│   │       │   └── test.md         <- snapshot of the real generated test file(s) + manual checklist + "How to run" (§4.3)
 │   │       ├── document/
 │   │       │   └── document.md
 │   │       └── errors/
-│   │           ├── errors.md       <- flat, append-only error log for this feature (§4.6)
-│   │           └── diagnosis.md    <- append-only diagnoses from fix-error, cross-referenced by error # (§4.6)
+│   │           ├── errors.md       <- flat, append-only error log for this feature (§4.6) — NOT per-version, errors can happen any time
+│   │           └── fix-plan.md     <- append-only fix plans from fix-error, cross-referenced by error # (§4.6)
 ```
 
 ---
@@ -77,22 +80,23 @@ project-root/
 
 ### 4.1 Logic
 
-- **What it is:** A high-level, human-understandable description of how the feature should work. This is the step where the human's own understanding is the actual product, and the primary input to both Code (§4.2) and Test (§4.3). `draft logic` also reads `JOURNAL/architecture.md` (§7) as background context, so the feature's reasoning stays consistent with the overall system shape without restating it.
+- **What it is:** A high-level, human-understandable description of how the feature should work. This is the step where the human's own understanding is the actual product, and the primary input to both Code (§4.2) and Test (§4.3). `draft logic` also reads `JOURNAL/SRS/architecture.md` (§7) as background context, so the feature's reasoning stays consistent with the overall system shape without restating it.
 - **Command:** `draft logic <feature> ["brain dump text"] [--file]` (i.e. `draft <step> <feature> ["description"] [--file]`, §11, with step=logic)
 
 **Iterative refinement mechanism:**
-- All brain-dump content — however it arrives — lands in a single file, `logic/brain-dump.md`, which is the persistent history for that feature's Logic. CLI-provided text is appended to this file as a new labeled section (e.g. `## Round 1`), not used ephemerally and discarded — this keeps CLI input and direct file edits equivalent, just two ways of adding to the same record.
-- **First call, no inline text:** rather than immediately falling back to full AI generation, `list-steps`/`add-step` pre-creates an empty (frontmatter-only) `brain-dump.md` up front, so even a first pass goes through a file rather than an awkward command-line string (useful especially when working from a phone, or when there's a lot to write). If the user chooses to leave it empty and re-run the command, AI generates Logic from the feature description alone (attribution `ai`, per §5).
-- **Writing a large round directly in the file:** rather than passing a long brain dump as a CLI string, the user can write directly into `brain-dump.md` and re-run with `--file`, which reads the file's current content as the round instead of an inline description. In practice this is mostly a clarity/intent flag — `draft logic` already re-reads the full `brain-dump.md` history on every run regardless — but `--file` matters when an inline description is *also* given, telling the command "ignore that inline text, I already wrote it in the file" instead of appending the inline text as a redundant new round.
-- **Refinement rounds:** the user adds feedback/suggestions as a new labeled section appended below the existing content in `brain-dump.md` (not interleaved into the original text — each round stays a distinct, separately readable block, since the raw original input is what the deferred diff-scoring feature (§12) will eventually want to compare against). Re-running `draft logic <feature>` (no text needed once the file exists) reads the full `brain-dump.md` history plus the current `logic.md` and produces an updated `logic.md`.
+- All brain-dump content — however it arrives — lands in `logic/brain-dump.md`. CLI-provided text is appended to this file as a new labeled section (e.g. `## Round 1`), not used ephemerally and discarded — this keeps CLI input and direct file edits equivalent, just two ways of adding to the same record.
+- **Pre-created up front, not created lazily on first draft.** `list-steps`/`add-step` pre-creates an empty (frontmatter-only) `brain-dump.md` at the moment a feature's pipeline is registered — so there's always somewhere to write, even before the first `draft logic` call, rather than a first pass going through an awkward command-line string (useful especially when working from a phone, or when there's a lot to write). If the user leaves it empty and runs `draft logic` anyway, AI generates Logic from the feature description alone (attribution `ai`, per §5).
+- **Writing a large round directly in the file:** rather than passing a long brain dump as a CLI string, the user can write directly into `brain-dump.md` and re-run with `--file`, which reads the file's current content as the round instead of an inline description. In practice this is mostly a clarity/intent flag — `draft logic` already re-reads the current `brain-dump.md` on every run regardless — but `--file` matters when an inline description is *also* given, telling the command "ignore that inline text, I already wrote it in the file" instead of appending the inline text as a redundant new round.
+- **Refinement rounds, within a version:** the user adds feedback/suggestions as a new labeled section appended below the existing content in `brain-dump.md` (not interleaved into the original text — each round stays a distinct, separately readable block). Re-running `draft logic <feature>` (no text needed once the file exists) reads the full current-version `brain-dump.md` history plus the current `logic.md` and produces an updated `logic.md`.
+- **Reset per version — revised from the earlier design.** `brain-dump.md` was originally designed to persist across every version of a feature, on the theory that the full history would feed a future diff-scoring feature. Real v2 testing showed this was actively confusing: starting a new version showed a clean, correctly-versioned `logic.md`, but `brain-dump.md` still held the *previous* version's brain dump, unlike everything else in the pipeline. **`brain-dump.md` now follows the same per-version model as `logic.md` itself** — `new-version` resets it fresh (frontmatter-only, empty, tagged with the new version number), matching how `logic.md`, `code.md`, and `test.md` already reset per version (§6.3). Old brain dumps remain fully recoverable via git history, same as every other per-version file — nothing is lost, it just isn't sitting in one continuously-growing file anymore. This removes the need for `brain-dump.md` to be a special case; it now behaves exactly like the files that derive from it.
 - **Locking:** once `commit logic` runs, the discussion is closed for that version. Further changes require `new-version` — no special "edit after commit" path. This is now actively detected, not just a stated norm — see §6.5.
 
 ### 4.2 Code
 
 - **What it is:** The actual implementation, derived from the feature's committed Logic (the primary input — `draft code` reads it directly, and a well-written Logic naturally determines file structure, including multi-file splits, without a separate mechanism for that).
 - **Command:** `draft code <feature> ["sketch"] [--file]` (i.e. `draft <step> <feature> [--file]`, §11, with step=code and the optional argument used as a sketch)
-- **Optional sketch input:** the user may additionally provide a rough code-level sketch/pseudocode, which persists to `code/sketch.md` — every sketch kept, same as `brain-dump.md` does for Logic, rather than being used once and discarded. Confirmed decision, for the same future diff-scoring reasons. `list-steps`/`add-step` pre-creates `sketch.md` up front (same as `brain-dump.md`) so there's somewhere to write a large sketch directly; `--file` reads it directly the same way it does for Logic's brain dump.
-- **Style:** consults `JOURNAL/style.md` (§7) before generating.
+- **Optional sketch input:** the user may additionally provide a rough code-level sketch/pseudocode, which persists to `code/sketch.md`. Same pre-creation, round-labeling, `--file`, and **per-version reset** convention as Logic's `brain-dump.md` (§4.1) — `list-steps`/`add-step` pre-creates `sketch.md` up front so there's somewhere to write a large sketch directly, and `new-version` resets it fresh.
+- **Style:** consults `JOURNAL/SRS/style.md` (§7) before generating.
 - **Annotations:** produces `code/annotations.md` flagging unfamiliar terms not present in the Logic (§6.6).
 - **Snapshot:** the real code lives in `src/`; an exact copy is synced to `JOURNAL/features/feature-x/code/` at commit time (§6.2).
 - **Open/undecided:** whether to show a short outline of planned code structure before writing the full implementation (§12).
@@ -100,12 +104,13 @@ project-root/
 ### 4.3 Test
 
 - **What it is:** Verification that the code does what Logic said it should do — split explicitly into what can be checked by an automated assertion versus what needs a human to look and confirm.
-- **Command:** `draft test <feature>` (i.e. `draft <step> <feature>`, §11, with step=test), used in two phases:
-  1. **First run (no `test-outline.md` yet):** reads the feature's committed Logic, derives candidate things to verify, and proposes a split — **automatable** (testable via real assertions) vs. **manual/visual** (things like layout/appearance that can't become code assertions) — writing the result into `test/test-outline.md`.
-  2. **User reviews and edits `test-outline.md` directly** — adding/removing cases, reclassifying automatable vs. manual, and adding notes on how a specific test should be written.
-  3. **Re-running `draft test <feature>`** (outline now exists) generates the real content: actual test code for automatable items, written to a real, runnable file (e.g. `tests/test_feature.py`, following the testing framework named in `style.md` — §7), with a copy synced into `test/test.md`; and a checklist for manual/visual items, which exists only in `test/test.md` since there's no "real" file for something a human just looks at. `test/test.md` also gets a **"How to run"** section naming the project's test command (`JOURNAL/config.json`'s `testCommand`, prompted for lazily on the first `commit test` if not already set) — no more guessing how to invoke the generated tests — and explicit instructions for the manual checklist: check a box only once actually verified, with a short note of what was checked appended after the item (not just an unlabeled `[x]`).
-- **`commit test` requirement:** does not complete until automated tests pass **and** every manual checklist item has been explicitly checked off — not a general "looks fine, commit."
-- **Re-editing the outline:** no limit — edit `test-outline.md` as many times as needed, rerun `draft test` to regenerate. Edits follow the same round-labeled convention as `brain-dump.md` (§4.1) — each round its own labeled section, not mixed into prior text — confirmed decision, kept consistent for the same reasons: preserves history for future diff-scoring, and merges cleanly under §6.7's concurrent-commit handling.
+- **Command:** `draft test <feature> [--file]` (i.e. `draft <step> <feature> [--file]`, §11, with step=test), used in two phases:
+  1. **First run (no `test-outline.md` content yet):** reads the feature's committed Logic, derives candidate things to verify, and proposes a split — **automatable** (testable via real assertions) vs. **manual/visual** (things like layout/appearance that can't become code assertions) — writing the result into `test/test-outline.md`. `list-steps`/`add-step` pre-creates this file empty, same as `brain-dump.md`/`sketch.md` (§4.1, §4.2), and `new-version` resets it fresh.
+  2. **User reviews and edits `test-outline.md` directly** — adding/removing cases, reclassifying automatable vs. manual, and adding notes on how a specific test should be written. `--file` re-reads it explicitly, same convention as Logic/Code.
+  3. **Re-running `draft test <feature>`** (outline now has content) generates the real content: actual test code for automatable items, written to a real, runnable file (e.g. `tests/test_feature.py`, following the testing framework named in `style.md` — §7), with a copy synced into `test/test.md`; and a checklist for manual/visual items, which exists only in `test/test.md` since there's no "real" file for something a human just looks at. `test/test.md` also gets a **"How to run"** section naming the project's test command (`JOURNAL/config.json`'s `testCommand`, prompted for lazily on the first `commit test` if not already set) — no more guessing how to invoke the generated tests — and explicit instructions for the manual checklist: check a box only once actually verified, with a short note of what was checked appended after the item (not just an unlabeled `[x]`).
+- **After a successful `commit test`, automated test entries in `test.md` get marked as passing**, with the date — a visible confirmation that they were actually run and passed, not just written. Previously `commit test`'s pass/fail gate was internal only; nothing in `test.md` reflected that a test had actually been run and confirmed.
+- **`commit test` requirement:** does not complete until automated tests pass **and** every manual checklist item has been explicitly checked off — not a general "looks fine, commit." A test failure now automatically opens an error entry (§4.6) rather than just refusing silently.
+- **Re-editing the outline:** no limit within a version — edit `test-outline.md` as many times as needed, rerun `draft test` to regenerate. Edits follow the same round-labeled convention as `brain-dump.md` (§4.1) — each round its own labeled section, not mixed into prior text.
 
 ### 4.4 Document
 - **What it is:** Documentation of what the code does, written so others (including future-you) can understand it without re-deriving the logic.
@@ -123,7 +128,7 @@ The four steps above are the default, not fixed. `list-steps` proposes an approp
 
 **Performance is template-seeded, not blank**, since unlike Quality it has a well-known standard structure (load, stress, response time/latency, resource usage) that doesn't depend on project-specific judgment to define. The seeded categories are a starting scaffold, not a schema — fully editable, and an expert can discard them entirely and write whatever's actually relevant (e.g. p95/p99 latency targets, connection pool limits).
 
-**Adding a step to a feature already underway:** `add-step <feature> <step-name>` — registers that a step applies to this feature (creates its folder, adds it to the pipeline) but generates no content itself. Distinct from `list-steps`, which proposes the whole pipeline typically at feature creation; `add-step` handles realizing mid-feature that something else is needed (e.g. Performance, Accessibility).
+**Adding a step to a feature already underway:** `add-step <feature> <step-name>` — registers that a step applies to this feature (creates its folder, pre-creates its round-file empty, adds it to the pipeline) but generates no content itself. Distinct from `list-steps`, which proposes the whole pipeline typically at feature creation; `add-step` handles realizing mid-feature that something else is needed (e.g. Performance, Accessibility).
 
 To actually populate the step, use the unified `draft` command (see §11): `draft <step-name> <feature> ["description"] [--file]`.
 - **Description given:** same organize-not-invent pattern as Logic (§4.1) — saved to `steps/<step-name>/brain-dump.md`, AI organizes it into the actual step file, attribution `person`. This takes priority regardless of whether the step name matches a known template. `--file` reads that step's `brain-dump.md` directly, same convention as Logic.
@@ -134,21 +139,27 @@ This means there's no hard split between "steps we've designed for" and "everyth
 
 ### 4.6 Errors Log
 
-Not one of the four/customizable steps — a separate, flat, append-only log per feature (`errors/errors.md`), for capturing runtime errors and how they were resolved. Unlike the steps above, it isn't tied to a version — an error can happen at any time, including well after every step has been committed.
+Not one of the four/customizable steps — a separate, flat, append-only log per feature (`errors/errors.md`), for capturing runtime errors and how they were resolved. Unlike the steps above, it isn't tied to a version — an error can happen at any time, including well after every step has been committed, and it is **not** subject to the per-version reset described in §4.1 — it accumulates for the life of the feature.
 
-- **Logging an error:** `log-error <feature> [errorOutput] [description]` — the raw terminal/error output is kept as a separate slot from the user's own account of what happened and where, rather than one combined free-text field. If output is piped in (e.g. `npm test | journal log-error tic-tac-toe`), it fills `errorOutput` automatically, leaving the CLI argument free for the user's own description. Without piped input or either argument, an empty entry opens for manual filling — same fallback pattern as Logic (§4.1). Creates a new, timestamped, **open** entry.
-- **Resolving it:** `resolve-error <feature> ["fix note"] [--id <n>] [--agent]` — appends the fix to the most recent open entry (or a specific one via `--id`) and marks it resolved. For longer explanations than the one-line note supports, the user can hand-edit `errors.md` directly afterward — `resolve-error` is meant for the quick note and the status flip together; anything added by hand afterward is purely additive to an already-resolved entry.
-- **Attribution — who fixed it:** detected from *how the command was invoked*, not self-reported, consistent with the rest of this method. An AI agent acting autonomously (e.g. fixing a bug on its own without the user typing the command) passes `--agent` when calling `resolve-error`; its absence means a human ran it directly, which is the default (`person`). This is the same "let the mechanism declare it, don't ask anyone to self-report" principle used for step attribution (§5) — just applied to *who invoked the command* rather than *what content was given*.
-- **AI does not use this automatically.** An AI agent (e.g. Claude Code) working on the project won't spontaneously start using `log-error`/`resolve-error` just because they exist — it only does so if explicitly instructed to as part of its working instructions for the project. Worth stating directly to any AI agent given autonomy over running/fixing a feature, if this record is wanted.
+**Full lifecycle** — mirrors Logic → Code exactly, applied to debugging instead of initial implementation:
+
+1. **`log-error <feature> [errorOutput] [description]`** — the raw terminal/error output is kept as a separate slot from the user's own account of what happened and where, rather than one combined free-text field. If output is piped in (e.g. `npm test | journal log-error tic-tac-toe`), it fills `errorOutput` automatically, leaving the CLI argument free for the user's own description. Without piped input or either argument, an empty entry opens for manual filling. Creates a new, timestamped, **open** entry.
+2. **`fix-error <feature> [--id <n>] ["steps"]`** — same organize-not-invent pattern as everywhere else. Give your own fix steps if the error is simple (attribution `person`, exactly like a Logic brain dump); leave it blank and AI proposes a diagnosis plus fix steps (attribution `ai`). Output goes to `errors/fix-plan.md` — persistent, append-only, cross-referenced by error number (e.g. "Plan for Error #3"), following the same round-labeled convention as `brain-dump.md` — re-running `fix-error` on the same entry appends a new round rather than overwriting.
+3. **You review/edit `fix-plan.md` directly** if needed, no separate command required — same as editing `test-outline.md`.
+4. **`apply-fix <feature> [--id <n>]`** — reads whatever's currently in the plan and writes the actual code. This is the **only** place AI is allowed to write a fix, and only because a reviewed plan already exists behind it — same relationship as `draft code` reading committed Logic, not autonomous fixing. This also closes a real friction point from v2 testing: previously, resolving an error meant leaving the tool entirely to use AI in a separate terminal session — `apply-fix` keeps the whole loop inside JOURNAL.
+5. **`resolve-error <feature> ["fix note"] [--id <n>]`** — the deliberate verification checkpoint: you confirm the fix actually works, separate from just applying one (you can apply a fix, find it doesn't work, and simply not resolve yet). **Attribution is not declared here** — no `--agent` flag. Attribution is inherited automatically from whichever origin the fix-plan had in step 2 (`person` if you gave the steps, `ai` if AI proposed them and they went essentially unedited) — same "attribution reflects who did the thinking, not who typed the last command" rule Code already follows (§4.2).
+
+**Automatic logging on test failure.** `commit test`'s existing gate (§4.3 — refuses to complete if automated tests fail) now also **automatically creates an open error entry** capturing the failing test output the moment it refuses, rather than requiring a manual `log-error` call. No self-report needed, since the tool already has the failure output right there. Only actual test *failures* trigger this — an unchecked manual checklist item is unfinished verification, not a bug, and doesn't auto-log. This feeds straight into the same lifecycle above (`fix-error` → `apply-fix` → `resolve-error` → retry `commit test`).
+
 - **Dashboard:** surfaced as its own cell per feature (§8) — clicking it expands the list of entries (open and resolved), each showing its fix note and attribution dot, same visual treatment as a step.
-- **Diagnosing before fixing:** `fix-error <feature> [--id <n>]` reads a logged error (most recent open one by default, or a specific one via `--id`) plus the feature's Logic and code, and generates a diagnosis — why the error likely happened, and a suggested approach. **It does not edit code** — no autonomous mode, no assisted-write mode, text output only. The diagnosis is appended to `errors/diagnosis.md`, one entry per error, cross-referenced by the same error number used in `errors.md` (e.g. "Diagnosis for Error #3"), never overwritten — same append-only pattern as `errors.md` and `brain-dump.md`. The person reads it, writes the actual fix themselves, then runs `resolve-error` as normal — `fix-error` only adds a diagnosis step before that; it doesn't change how resolving works.
-- **Why not autonomous:** an error is the moment a person's mental model of the code was wrong — arguably the highest-leverage moment for understanding in the whole pipeline, since it's a concrete, specific gap between expectation and reality. Auto-fixing it would remove exactly that moment, the same failure mode as the original tic-tac-toe episode that motivated this whole method, just relocated to debugging instead of initial implementation. This is also why `fix-error` correctly results in `person` attribution once resolved (§5) — AI explaining the problem doesn't make the fix AI's work; the person writing the actual code is what does.
+- **AI does not use this automatically.** An AI agent (e.g. Claude Code) working on the project won't spontaneously start using this lifecycle just because it exists — it only does so if explicitly instructed to as part of its working instructions for the project.
+- **Why `apply-fix` still requires a plan, not just "fix this":** an error is the moment a person's mental model of the code was wrong — arguably the highest-leverage moment for understanding in the whole pipeline. Requiring a plan (even a thin, unedited AI one) keeps a reviewable decision in the loop before code changes, rather than reverting to the autonomous-fixing pattern this tool was built to move away from.
 
 ### 4.7 Integration Testing (cross-feature behavior)
 
 Test (§4.3) is scoped to one feature and derives from that feature's own Logic — it has no natural home for behavior that spans features (e.g. "after Login succeeds, Session Management reflects logged-in state"). Rather than a new mechanism, this is handled by treating the cross-feature concern as its **own feature, with a reduced pipeline**:
 
-- `add-feature login-session-integration --group auth`, then `list-steps` configured as **Logic → Test only** — skip Code entirely, already supported by §4.5's customizable step sets. No new command, no new file structure.
+- `add-feature login-session-integration --group auth`, then `list-steps` configured as **Logic → Test only** — skip Code entirely, already supported by §4.5's customizable step sets. `add-feature` is no longer the primary way features get created (§9.2 — that's now the SRS-driven `draft features`/`commit features` flow), but it's kept for exactly this kind of deliberate, one-off technical construct that wouldn't naturally emerge from a project brain dump.
 - **Logic** describes the contract between features (ordering/timing guarantees, what one feature can assume about another) rather than one feature's internal reasoning.
 - **Test** derives an integration test from that Logic via the normal two-phase outline-then-generate flow (§4.3).
 - With no Code step, there's no `code/` content or snapshot sync, and the drift check (§6.5) simplifies to just Logic's own hand-edit protection — no downstream Code file to go stale against.
@@ -164,7 +175,7 @@ Real automatic dependency detection would need either static analysis of Code (o
 - **Inherits Logic's existing protections for free.** Because it lives inside `logic.md`, a declared dependency is automatically covered by Logic's lock-after-commit and drift detection (§6.5) — no new locking mechanism needed.
 - **Visual graph, inside the existing dashboard, as a toggle — not a separate file.** Same reasoning as Integration Tests (§4.7, §8): one file, switching what's displayed, not navigating away. Nodes are features, edges are declared dependencies, Obsidian-style — this is the only surface for viewing dependencies; a separate plain-text CLI command (`journal deps`) was considered and cut, since folding the graph into the same dashboard file removed most of the friction that would have justified a second, terminal-only view of the identical data.
 - **Self-report safety net:** extends §6.6's annotations — every feature's `codePaths` are already recorded (§3, §6.2), so if generated code imports something matching another feature's recorded `codePaths` that was never named in that feature's `depends-on`, flag it. Not full static analysis, just a path match against data already collected — catches a forgotten declaration after the fact, even though it can't prevent one.
-- **Fixing a caught, missed dependency requires `new-version` — no lighter exception.** Because Code is drafted from *committed* Logic (§4.2), by the time the safety net above can even fire, Logic is already locked. Logic has no "minor edit, one-line note" tier the way Code/Test do (§6.5) — every post-commit Logic change, including adding a missed `depends-on` line, points at `new-version`. This was a deliberate choice, not an oversight: a narrower exception (fixing just the dependency line without a full version bump) was considered and rejected in favor of staying consistent with Logic's strict lock, even though it means a single missed dependency costs a full new version to correct.
+- **Fixing a caught, missed dependency requires `new-version` — no lighter exception.** Because Code is drafted from *committed* Logic (§4.2), by the time the safety net above can even fire, Logic is already locked. Logic has no "minor edit, one-line note" tier the way Code/Test do (§6.5) — every post-commit Logic change, including adding a missed `depends-on` line, points at `new-version`. This was a deliberate choice, not an oversight.
 - **Claim vs. evidence, deferred:** a future upgrade — once real static analysis exists — could overlay *actual* Code-level dependencies against *declared* ones and flag mismatches. Not built now; declared dependencies plus the annotations safety net is the whole of v1.
 
 ---
@@ -173,7 +184,7 @@ Real automatic dependency detection would need either static analysis of Code (o
 
 Attribution is recorded per step, per version, and is **automatically detected from tool usage** — nothing is self-reported.
 
-- **`person`** — a brain dump (Logic) or sketch (Code) was provided/present when the draft command produced its result. For Logic specifically, this reflects the latest state of `brain-dump.md` at commit time, not a per-round score.
+- **`person`** — a brain dump (Logic) or sketch (Code) was provided/present when the draft command produced its result. For Logic specifically, this reflects the latest state of the current version's `brain-dump.md` at commit time, not a per-round score.
 - **`ai`** — no brain dump/sketch was present; AI generated the content from the feature/file description alone.
 - **`legacy`** — content originates from `journal-init`'s bootstrap of a pre-existing codebase (§9.1).
 
@@ -181,10 +192,10 @@ Attribution is recorded per step, per version, and is **automatically detected f
 
 - **`person` entries carry the git commit author's name** (from `git config user.name`), read directly off the commit `commit-*` already makes (§6.1) — not a separate declaration. If a step was genuinely done by more than one person, git's own `Co-authored-by:` commit trailer convention is read the same way, so multiple names attach to one entry when that's how it was actually committed. Email is deliberately not captured or shown — name only.
 - **`ai` entries carry the specific model/provider identifier** from whichever `AIProvider` adapter (§10) actually handled that draft (e.g. `claude-sonnet-4-6`) — information the tool already has internally at draft time and was simply not retaining.
-- This scales to any number of contributors with no new mechanism: each step, each version, already gets its own commit and therefore its own author — a project with one contributor and a project with twenty behave identically at the data layer, since nothing aggregates across people, it's just recorded per commit as it already happens.
-- **Display stays the existing three-color scheme** (person/ai/legacy), not a color per individual — a distinct color per contributor stops being readable past a handful of people. The specific name/model appears as plain text alongside the existing colored dot, so the fast at-a-glance signal (person vs. AI vs. legacy) is unchanged, and the specific identity is there when you want to read it.
+- This scales to any number of contributors with no new mechanism: each step, each version, already gets its own commit and therefore its own author.
+- **Display stays the existing three-color scheme** (person/ai/legacy), not a color per individual. The specific name/model appears as plain text alongside the existing colored dot.
 
-**Deferred (see §12):** degree-of-collaboration scoring via before/after diffs, and scoring based on the full `brain-dump.md` round history rather than just its latest state.
+**Deferred (see §12):** degree-of-collaboration scoring via before/after diffs, and scoring based on a version's full round history rather than just its latest state.
 
 ---
 
@@ -194,25 +205,27 @@ Attribution is recorded per step, per version, and is **automatically detected f
 Each step has its own commit command. Running it determines attribution (§5), performs a git commit, and records the SHA into that feature's fragment file (§8.1) — never the shared `JOURNAL/index.json` directly.
 
 ### 6.2 Code snapshot sync
-`commit code` copies the relevant code into `JOURNAL/features/feature-x/code/`, tagged with the commit SHA. The same pass also scans those files' import/require statements and records external packages referenced (filtering out relative/in-project imports) as that feature's `libraries` list in its fragment (§8.1) — fully automatic, no self-report, since this is plain syntax parsing rather than the harder semantic problem §4.8's feature-to-feature dependencies ran into. Not to be confused with §4.8's `dependsOn` — that's *feature*-to-*feature*; this is *feature*-to-*external package*.
+`commit code` copies the relevant code into `JOURNAL/features/feature-x/code/`, tagged with the commit SHA. The same pass also scans those files' import/require statements and records external packages referenced (filtering out relative/in-project imports) as that feature's `libraries` list in its fragment (§8.1) — fully automatic, no self-report. Not to be confused with §4.8's `dependsOn` — that's *feature*-to-*feature*; this is *feature*-to-*external package*.
 
 ### 6.3 Historical access via SHA
-Old-version links in the dashboard resolve via `git show <sha>:<path>`, since step files are overwritten each version.
+`logic.md`, `brain-dump.md`, `sketch.md`, `test-outline.md`, and `document` are overwritten each version, with no local archive — a non-current version's link for these shows the exact `git show <sha>:<path>` command to run yourself in a terminal, rather than displaying the content inline. The dashboard is a static generated file with no ability to execute git itself, so baking full historical content into `index.json` was considered and rejected in favor of keeping the dashboard lightweight (§8).
+
+`code` and `test` are the exception: `new-version` (§9's table) archives the previous version's snapshot locally (`code-v<N>/`, `test.v<N>.md`) rather than only relying on git history for these two, so a non-current version's Code/Test cell stays a real, clickable link straight to that archived snapshot whenever it exists — the `git show` hint is only shown as a fallback for those two when no local archive is present (e.g. an older project from before archiving was added).
 
 ### 6.4 Commit writes must stay in sync with the index
-Every `commit-*` command's git commit and its write to that feature's fragment file (§8.1) must not drift apart; fail loudly if both can't complete. Scoping this to one feature's fragment, rather than one shared file, makes the guarantee easier to hold — no risk of one feature's commit corrupting another's data in the same write.
+Every `commit-*` command's git commit and its write to that feature's fragment file (§8.1) must not drift apart; fail loudly if both can't complete.
 
 ### 6.5 Drift detection (Code and Test, plus Logic integrity)
 
 Because Code and Test are meant to be primarily driven by upstream files (Logic, and the test outline), directly hand-editing the downstream file risks the upstream going silently stale. A single three-tier model applies to both:
 
 1. **Primary path:** update the upstream file (Logic for code; `test-outline.md` for tests) and rerun `draft code` / `draft test` — everything downstream regenerates properly.
-2. **Minor direct edit** (styling, formatting, a for-loop instead of a while-loop — no behavior change): detected by comparing the file against what was last generated. Flagged, non-blocking — the tool asks once, after the relevant commit completes, *"You edited this directly — what changed, in one sentence?"* Skippable; if skipped, logged as "possibly stale." The answer is appended as a short note to the corresponding upstream file (Logic for code edits; `test-outline.md` for test edits). A minor code edit does not need to flag Test, and vice versa, since by definition it didn't change behavior.
-3. **Major direct edit** (actually changes what the feature does): the recommended path is `new-version`, typically after real review/feedback — matching the original definition of what a version represents.
+2. **Minor direct edit** (styling, formatting, a for-loop instead of a while-loop — no behavior change): detected by comparing the file against what was last generated. Flagged, non-blocking — the tool asks once, after the relevant commit completes, *"You edited this directly — what changed, in one sentence?"* Skippable; if skipped, logged as "possibly stale." The answer is appended as a short note to the corresponding upstream file (Logic for code edits; `test-outline.md` for test edits).
+3. **Major direct edit** (actually changes what the feature does): the recommended path is `new-version`, typically after real review/feedback.
 
 This check is **post-commit**, not blocking — `commit code`/`commit test` complete normally first, and the check runs afterward.
 
-**Logic itself needs the equivalent protection, but Logic has no upstream to append a note to** — it *is* the upstream. Once `commit logic` has run, `logic.md` is meant to be locked (§4.1) until `new-version`. This is currently only a stated norm, not detected — a real gap, since Logic is the most important file in JOURNAL and currently has weaker protection than the files that derive from it. The fix: the same before/after comparison used for Code and Test applies here too — any `draft`/`commit` command touching that feature checks whether `logic.md` still matches what was last committed. If it was hand-edited outside `draft logic` + `commit logic` since the last commit, flag it immediately (not appended anywhere, since there's nowhere upstream to append to) and point directly at `new-version` — there's no "minor edit, one-line note" tier for Logic the way there is for Code/Test, since a real Logic change already meets the definition of what a version is (§2). **Non-blocking**, same as Code and Test — the flag warns and recommends `new-version`, but doesn't refuse to run further commands on that feature; the tool never auto-starts a new version on its own, that decision stays with the user.
+**Logic itself needs the equivalent protection, but Logic has no upstream to append a note to** — it *is* the upstream. Once `commit logic` has run, `logic.md` is meant to be locked (§4.1) until `new-version`. The fix: the same before/after comparison used for Code and Test applies here too — any `draft`/`commit` command touching that feature checks whether `logic.md` still matches what was last committed. If it was hand-edited outside `draft logic` + `commit logic` since the last commit, flag it immediately and point directly at `new-version` — there's no "minor edit, one-line note" tier for Logic. **Non-blocking**, same as Code and Test — the tool never auto-starts a new version on its own, that decision stays with the user.
 
 ### 6.6 Code annotations (unfamiliar-term flagging)
 
@@ -226,37 +239,43 @@ After generating code, `draft code` compares the generated code's terms (functio
 
 Two people committing to *different* features around the same time never collide — see §8.1's per-feature fragment design, which removes that case entirely by construction.
 
-Two people committing to the **same feature** at the same time is a real conflict, not a false one from shared-file structure, and is handled by extending the lock already defined in §4.1:
+Two people committing to the **same feature** at the same time is a real conflict, and is handled by extending the lock already defined in §4.1:
 
-- **"First" is determined by git's own push order, not local commit order** — nothing new to build here. Git already rejects a push when the remote has changes the pusher doesn't have (standard behavior); this is the natural trigger point, not a separate network check the tool has to add on every local command.
-- **When the second person pulls and their local commit collides with the fragment now on the remote, the tool stops them and presents a choice — it does not auto-decide for them.** They're told a version was already locked (by whom), and can either run `new-version` themselves to carry their work forward, or discard it if it turns out to be unnecessary. Consistent with JOURNAL's standing rule that it flags and blocks but never silently makes a versioning decision on someone's behalf (same principle as Logic drift detection, §6.5).
-- **Nothing is overwritten.** v1 stays exactly as committed, recoverable via `git show <sha>:<path>` (§6.3); a chosen `new-version` builds v2 explicitly on top of it. Same "preserve, don't erase" principle as `remove-feature` (§9.3).
-- **Actually resolving the disagreement (is the second person's work still needed?) is a human/team conversation, not something the tool automates or forces** — it can surface who locked the version, but coordinating from there is outside its scope.
+- **"First" is determined by git's own push order, not local commit order** — nothing new to build here. Git already rejects a push when the remote has changes the pusher doesn't have.
+- **When the second person pulls and their local commit collides with the fragment now on the remote, the tool stops them and presents a choice — it does not auto-decide for them.** They're told a version was already locked (by whom), and can either run `new-version` themselves to carry their work forward, or discard it if it turns out to be unnecessary.
+- **Nothing is overwritten.** v1 stays exactly as committed, recoverable via §6.3; a chosen `new-version` builds v2 explicitly on top of it.
+- **Actually resolving the disagreement is a human/team conversation, not something the tool automates or forces.**
 
 ---
 
 ## 7. Global Style, Testing, and Architecture
 
-A single project-level file, `JOURNAL/style.md`, holds:
+Both files now live in `JOURNAL/SRS/` alongside `brain-dump.md`/`features.md` (§9.2), since all four are project-level artifacts, not per-feature ones.
+
+**`SRS/style.md`** holds:
 - **Code style preferences** — e.g. "prefer simple, explicit statements over clever one-liners."
-- **Testing preferences** — e.g. "Python tests: use pytest." Only needs to cover the kinds of code actually being automated-tested; features whose testing is entirely manual/visual (e.g. UI appearance) don't require any testing-library preference at all, since those items become checklist entries, not code (§4.3).
+- **Testing preferences** — e.g. "Python tests: use pytest." Only needs to cover the kinds of code actually being automated-tested; features whose testing is entirely manual/visual don't require any testing-library preference at all, since those items become checklist entries, not code (§4.3).
 
-Both `draft code` and `draft test` read this file every time they run. Set once, early; editable any time, applying to all future calls. A one-off override for a single call is reasonable as a flag rather than changing the global file.
+Both `draft code` and `draft test` read this file every time they run. Set once, early; editable any time.
 
-**Architecture** gets its own sibling file, `JOURNAL/architecture.md`, rather than living inside style.md or any single feature's Logic. Architecture — the overall system shape, major components, how they relate, key structural decisions — is a project-wide concern like style, not a feature-wide one like Logic; putting it inside one feature's Logic creates an ownership problem (which feature's Logic gets to describe the whole system?), and duplicating it across every feature's Logic is worse. `draft logic` reads `architecture.md` as background context so an individual feature's Logic stays consistent with the bigger picture without restating it. Freeform with a light scaffold (component list, data flow, key decisions) — a starting point, not a schema, same treatment as Performance's template-seeding (§4.5).
+**`SRS/architecture.md`** holds the overall system shape, major components, how they relate, key structural decisions. `draft logic` reads it as background context so an individual feature's Logic stays consistent with the bigger picture without restating it. Freeform with a light scaffold (component list, data flow, key decisions) — a starting point, not a schema.
 
-This is a lightweight answer to the cross-feature/module-interaction question raised early on and deliberately deferred — not the full thing (no formal dependency modeling between features, no drift detection between stated architecture and actual implementation), just giving that reasoning an honest place to live rather than nowhere. The fuller version stays open (§12).
+**Per-component overrides, for both files — one file with optional sections, not separate files per component.** Most projects need only the global rules at the top of each file. When a specific component genuinely needs its own style or architecture notes (e.g. the frontend and backend warrant different style guidance, or the database layer needs its own architecture notes beyond the system-wide shape), that goes in a clearly labeled section within the *same* file — e.g. a `## backend` heading in `style.md` — rather than a separate `style-backend.md` file. A feature's `draft code`/`draft logic` reads the global section plus its own component's section if one exists, falling back to the global rules alone if it doesn't. One file to open and see everything (global rules and any overrides together) beats hunting across several small files for something that's meant to be the exception, not the default. If a project's per-component notes genuinely grow large, splitting into separate files later is a reasonable upgrade — not worth building until that's an actual, demonstrated need.
+
+This is a lightweight answer to the cross-feature/module-interaction question raised early on — not the full thing (no formal dependency modeling, no drift detection between stated architecture and actual implementation), just giving that reasoning an honest place to live.
 
 ---
 
 ## 8. The Dashboard (`index.html`)
 
 - **Generated only**, via `build-dashboard`. Never hand-edited.
-- **Layout:** Features as rows, steps as sub-rows, each version displayed as a column (following the original spreadsheet-style design). Features sharing a group tag (§2) cluster together in the display; ungrouped features appear individually. Each cell shows attribution and links to content.
-- **Integration-test pseudo-features get their own labeled section** (same treatment as "Ungrouped"), **detected automatically** — any feature whose step pipeline has no `code` step (§4.7) is routed there instead of its normal group, since that structural fact alone identifies it without needing anyone to self-tag it as an integration test.
-- **List / Graph toggle** — the default view is the feature list described above; toggling switches the same page to a node/edge dependency graph (§4.8), features as nodes, declared dependencies as edges. One file, one place to look, not a separate page — same reasoning as the Integration Tests section.
-- **Removed features:** hidden by default (a toggle reveals them) — the dashboard's default view shows only active features, keeping it uncluttered, while removed features (§9.3) remain fully present in the underlying data for anyone who wants to look.
-- **Not yet surfaced in the dashboard (deferred, §12):** whether a feature's manual test checklist is fully checked off. The Errors log is now surfaced (§4.6) — a per-feature cell showing open/resolved entries with attribution.
+- **Auto-regenerated after key commands**, not just `commit-*`: `journal-init`, `draft features`, `commit features`, `add-feature`, and any `commit <step> <feature>` all trigger `build-dashboard` automatically afterward — the dashboard should reflect the project's current state without the user needing to remember a separate manual step every time.
+- **Layout:** Features as rows, steps as sub-rows, each version displayed as a column (following the original spreadsheet-style design). Features sharing a group tag (§2) cluster together in the display; **ungrouped features (the default — see §2) are shown in the implementation order proposed by `draft features`**, simplest to hardest, rather than alphabetically or by creation order — helping the user tackle features in a sensible sequence before any manual grouping happens.
+- **Integration-test pseudo-features get their own labeled section** (same treatment as "Ungrouped"), **detected automatically** — any feature whose step pipeline has no `code` step (§4.7) is routed there instead of its normal group.
+- **List / Graph toggle** — the default view is the feature list described above; toggling switches the same page to a node/edge dependency graph (§4.8), features as nodes, declared dependencies as edges.
+- **Removed features:** hidden by default (a toggle reveals them), remaining fully present in the underlying data (§9.3).
+- **Viewing a past version's content:** Code/Test stay real clickable links to their locally-archived snapshot when one exists; everything else (and Code/Test with no archive) shows a hint with the exact `git show <sha>:<path>` command to run in a terminal instead (§6.3) — kept lightweight rather than baking all historical content into the dashboard itself.
+- **Not yet surfaced in the dashboard, decided against for now (not just deferred):** a feature's manual test checklist completion status. This was left as an open question earlier; the decision now is not to show it unless a real need for it emerges later. The Errors log, by contrast, is surfaced (§4.6) — a per-feature cell showing open/resolved entries with attribution.
 
 ### 8.1 Data source: sharded fragments, aggregated into `JOURNAL/index.json`
 
@@ -271,8 +290,8 @@ JOURNAL/
 │   └── payment.json
 ```
 
-- Every `commit-*` command reads/writes **only its own feature's fragment**, never a shared file — two people committing to different features touch different files, so git sees no conflict, ever, regardless of timing.
-- `build-dashboard` is the only command that reads across all fragments and aggregates them into `index.json` — an extension of what it already does for `index.html`, not a new step in the workflow.
+- Every `commit-*` command reads/writes **only its own feature's fragment**, never a shared file.
+- `build-dashboard` is the only command that reads across all fragments and aggregates them into `index.json`.
 - Read performance for the dashboard is unaffected; only the write path changed.
 
 ---
@@ -280,17 +299,33 @@ JOURNAL/
 ## 9. Bootstrapping onto an Existing Project
 
 ### 9.1 `journal-init` — one-time onboarding
-A one-time bootstrap for pre-existing projects: scans the codebase, proposes a feature list + step pipeline per feature (user reviews/adjusts), populates Code snapshots immediately, leaves Logic/Test/Document blank with attribution `legacy`. Safe to re-run without overwriting real (non-`legacy`) entries.
+A one-time bootstrap: creates `JOURNAL/SRS/` with its files empty (§3, §7), and for a pre-existing project, immediately triggers `draft features`'s code-scanning branch (§9.2) — one mechanism, not a separate scanner. Populates Code snapshots immediately, leaves Logic/Test/Document blank with attribution `legacy`. Safe to re-run without overwriting real (non-`legacy`) entries.
 
-### 9.2 Ongoing feature creation stays feature-first
-`list-features` (bulk, at the start) or `add-feature` (one at a time, later) — never `journal-init` re-runs — is how new features get added going forward. `list-features` proposes features atomic by default (e.g. a "Login," "Signup," "Password Reset," and "Session Management" split rather than one large "Authentication" feature) — a focused Logic is easier to write well than one covering several concerns at once. The review step doubles as where the user merges an over-split proposal back together, or asks for finer breakdown.
+### 9.2 Feature discovery — SRS-driven, replacing one-shot `list-features`
+
+Features are now discovered through `JOURNAL/SRS/` (§3, §7) rather than a single one-time brain-dump argument. This closes a real asymmetry: every other input in JOURNAL (Logic, Code, Test, errors) is a persistent, evolving record — the original project-level "what is this app" description was the one thing that wasn't, previously passed as a single CLI string and never saved anywhere.
+
+**`draft features` (was `list-features`)** — same rename as the rest of the tool's `draft`/`commit` convention, since `SRS/brain-dump.md` → `SRS/features.md` is exactly the same pattern as a feature's own `brain-dump.md` → `logic.md`. Four branches, checked in order:
+
+1. **Input given** (`draft features "brain dump text"` or `--file`): appended to `SRS/brain-dump.md` as a new round (same convention as a feature's brain-dump.md, §4.1), then features are derived/updated into `SRS/features.md`.
+2. **No input, but `SRS/brain-dump.md` already has content:** re-derives `features.md` from whatever's currently in `brain-dump.md` — useful after hand-editing the brain dump directly, same as re-running `draft logic` after editing a feature's own brain-dump.md.
+3. **No input, `SRS/brain-dump.md` is empty, but code already exists:** scans the existing codebase, writes a reverse-engineered `brain-dump.md`, then derives `features.md` from that — this is also what `journal-init` triggers for a pre-existing project (see below), so there is only one scanning mechanism, not two.
+4. **No input, empty `brain-dump.md`, no code:** asks the user to provide something rather than guessing.
+
+**`commit features`** — reviews `SRS/features.md` (edit it directly first if needed, same as `test-outline.md`) and commits it. For every feature listed that doesn't yet have a tracked entry, creates one (feature folder, fragment, pre-created round-files — the same setup `add-feature` used to do). Attribution follows the same rule as everywhere else: `person` if `brain-dump.md` had fresh input this round, `ai` if the tool worked from what was already there.
+
+**Removal is never automatic, even when re-deriving from a changed brain dump.** If a previously-tracked feature is no longer implied by the current `brain-dump.md`, `commit features` flags it — *"X was tracked before but isn't reflected in the current brain dump — was it intentionally dropped, or just not mentioned this round?"* — and stops there. Actually removing a feature always still goes through the existing, deliberate two-step process (§9.3): delete the code yourself, then run `remove-feature`. Re-deriving the feature list only ever proposes additions; it never triggers a removal on its own.
+
+**`add-feature` still exists**, but is no longer the primary path — it's for a deliberate, one-off addition that wouldn't naturally emerge from a project-wide brain dump, like an integration-test pseudo-feature (§4.7). Its description, if given, is **appended to `SRS/brain-dump.md` as a new labeled round** (e.g. "Added directly via add-feature: `payment-refund`"), same convention as any other round — this keeps the project's brain-dump history complete even for features added through the fast path, rather than creating a silent gap in the record. Unlike the SRS-driven flow, `add-feature` **skips the separate `commit features` review step** and creates the tracked feature entry immediately — that immediacy is the whole point of using it instead of the full `draft features`/`commit features` cycle. A later `draft features` re-derivation naturally treats it as already-tracked and won't propose it again.
+
+`draft features` proposes features atomic by default (e.g. a "Login," "Signup," "Password Reset," and "Session Management" split rather than one large "Authentication" feature), ordered simplest to hardest to implement (§8). Features are **not** auto-grouped (§2) — grouping is entirely manual, via `add-feature --group` or `set-group`.
 
 ### 9.3 Removing a feature
 Removal is intentionally split into two separate actions, not one command:
-1. **The user deletes the feature's real code from `src/` themselves**, as a normal part of working in the codebase. The tool doesn't attempt to automatically identify and strip a feature's code from the rest of the project — too risky to safely automate.
+1. **The user deletes the feature's real code from `src/` themselves**, as a normal part of working in the codebase.
 2. **The user then runs `remove-feature <feature>`** to update JOURNAL accordingly.
 
-`remove-feature` marks the feature `removed` in `index.json` — it does **not** delete the JOURNAL folder or its files. This matches JOURNAL's own premise: a journal never erases a past entry, even a mistaken one — you write forward, not over. The dashboard (§8) hides removed features by default so the active view stays uncluttered, with a toggle to reveal them — so the record of what a removed feature was, and its full history, stays available without anyone needing to dig through git.
+`remove-feature` marks the feature `removed` in `index.json` — it does **not** delete the JOURNAL folder or its files. This matches JOURNAL's own premise: a journal never erases a past entry, even a mistaken one — you write forward, not over. The dashboard (§8) hides removed features by default so the active view stays uncluttered.
 
 ---
 
@@ -298,39 +333,44 @@ Removal is intentionally split into two separate actions, not one command:
 
 AI-powered commands call a single internal interface (`AIProvider.generate(prompt, options)`), not any provider's SDK directly. v1: a Claude adapter only, using `claude -p` (headless mode) via the user's existing Claude Code subscription, not a standalone API key. Provider choice is a single global project setting. Per-step provider configuration and additional provider adapters are deferred (§12).
 
+**Resilience:** AI provider output has been observed to occasionally return malformed/truncated JSON (e.g. an unterminated string, likely from an output length cutoff), causing the calling command to fail outright even though re-running the identical command succeeds. `AIProvider.generate` should retry automatically on a JSON-parse failure (a small, bounded number of retries) before surfacing an error to the user, rather than requiring the user to notice the failure and manually re-run the command themselves.
+
 ---
 
 ## 11. CLI Commands (draft list)
 
 | Command | Purpose |
 |---|---|
-| `journal-init` | One-time bootstrap for an existing project (§9.1). |
-| `list-features` | Bulk brain-dump → proposed feature list, atomic by default (§2), with a suggested group tag per feature (§2); human reviews/adjusts both. |
-| `add-feature <name> ["description"] [--group <group-name>]` | Adds a single new feature before any code is written for it. Group tag optional. |
+| `journal-init` | One-time bootstrap: creates `JOURNAL/SRS/` empty; for a pre-existing project, triggers `draft features`'s code-scanning branch (§9.1). Triggers `build-dashboard` afterward (§8). |
+| `draft features ["brain dump"] [--file]` | SRS-driven feature discovery, replacing one-shot `list-features` (§9.2). Four branches depending on input/`SRS/brain-dump.md`/existing code — writes/updates `SRS/features.md`. |
+| `commit features` | Reviews and commits `SRS/features.md`; creates tracked entries for newly-listed features. Never auto-removes a previously-tracked feature — flags a mismatch instead (§9.2). Triggers `build-dashboard` afterward. |
+| `add-feature <n> ["description"] [--group <group-name>]` | No longer the primary path (that's `draft features`/`commit features`, §9.2) — kept for a deliberate one-off addition, like an integration-test pseudo-feature (§4.7). Description, if given, is appended to `SRS/brain-dump.md` as a new labeled round, same as `draft features`, but the feature is created immediately — no separate `commit features` review step. Group tag optional and manual only. Triggers `build-dashboard` afterward. |
 | `set-group <feature> [<feature> ...] [<group-name>]` | Assigns or changes the group tag for one or more features in one call. Omitting `<group-name>` clears the tag (ungroups) for all listed features. |
-| `rename-group <old-group-name> <new-group-name>` | Retags every feature currently tagged `<old-group-name>` to `<new-group-name>`, in one operation. |
-| `remove-feature <feature>` | Marks a feature `removed` in `index.json` after its real code has been manually deleted from `src/` by the user first. JOURNAL folder and files are kept, not deleted — preserves the record. |
-| `list-steps <feature>` | Proposes a step pipeline for a feature; human confirms. |
-| `add-step <feature> <step-name>` | Registers a step for a feature already underway (folder + pipeline entry only, no content — see §4.5). |
-| `draft <step> <feature> ["description"] [--file]` | Unified content-generation command for any step, default or custom. Behavior is step-specific under the hood: Logic (§4.1) manages iterative `brain-dump.md` refinement; Code (§4.2) reads committed Logic (+ optional sketch), consults `style.md`, produces `annotations.md`; Test (§4.3) runs its two-phase outline-then-generate flow; any other step follows the description/template/blank logic in §4.5. `--file` reads the step's round file (`brain-dump.md`/`sketch.md`) directly instead of an inline description, for large input that's easier to write straight into the file (§4.1). |
-| `commit <step> <feature>` | Unified commit command for any step. Records attribution + SHA + index entry (§6.1). Step-specific behavior preserved: `commit test` requires passing automated tests + fully checked-off checklist (§4.3); `commit code` and `commit test` both trigger the post-commit drift check (§6.5). |
-| `new-version <feature>` | Starts a new version (revision pass) for a feature. |
+| `rename-group <old-group-name> [<new-group-name>]` | Retags every feature currently tagged `<old-group-name>` to `<new-group-name>`, in one operation. **Omitting `<new-group-name>` removes the group tag entirely** from every feature that had it — same clearing convention as `set-group`. |
+| `remove-feature <feature>` | Marks a feature `removed` in `index.json` after its real code has been manually deleted from `src/` by the user first. JOURNAL folder and files are kept, not deleted. |
+| `list-steps <feature>` | Proposes a step pipeline for a feature; human confirms. Pre-creates each step's round-file (§4.1–§4.5). |
+| `add-step <feature> <step-name>` | Registers a step for a feature already underway (folder + pipeline entry + pre-created round-file, no content — see §4.5). |
+| `draft <step> <feature> ["description"] [--file]` | Unified content-generation command for any step, default or custom. `--file` reads the step's round file directly instead of an inline description, for large input easier to write straight into the file (§4.1). |
+| `commit <step> <feature>` | Unified commit command for any step. Records attribution + SHA + index entry (§6.1). Triggers `build-dashboard` afterward. Step-specific behavior preserved: `commit test` requires passing automated tests + fully checked-off checklist (§4.3), marks passing tests in `test.md`, and auto-logs a failure as an error (§4.6); `commit code` and `commit test` both trigger the post-commit drift check (§6.5). |
+| `new-version <feature>` | Starts a new version (revision pass) for a feature — resets that feature's round-files (`brain-dump.md`, `sketch.md`, `test-outline.md`) fresh, tagged with the new version number (§4.1). |
 | `log-error <feature> [errorOutput] [description]` | Logs a new, open error entry for a feature (§4.6). Piped input fills `errorOutput` automatically; otherwise uses whatever of `errorOutput`/`description` was given, or opens an empty entry if neither was. |
-| `resolve-error <feature> ["fix note"] [--id <n>] [--agent]` | Appends a fix to the most recent open error entry (or a specific one via `--id`), marking it resolved. `--agent` marks attribution as `ai` (AI-agent-invoked); its absence means `person`. |
-| `fix-error <feature> [--id <n>]` | Generates a diagnosis (why the error likely happened, a suggested approach) from the logged error plus Logic and code — appended to `errors/diagnosis.md`. Does not edit code; the person implements the fix themselves before running `resolve-error` (§4.6). |
-| `build-dashboard` | Aggregates all `index-fragments/*.json` into `JOURNAL/index.json` (§8.1), then regenerates `index.html` from it — includes the List/Graph toggle (§8) and the Integration Tests auto-section (§4.7). |
+| `fix-error <feature> [--id <n>] ["steps"]` | Same organize-not-invent pattern as `draft`: fix steps given → `person`; left blank → AI proposes a diagnosis + steps → `ai`. Appends to `errors/fix-plan.md`, round-labeled like `brain-dump.md` (§4.6). Does not edit code. |
+| `apply-fix <feature> [--id <n>]` | Reads the current fix-plan and writes the actual code fix — the only place AI writes an error fix, and only because a reviewed plan already exists (§4.6). |
+| `resolve-error <feature> ["fix note"] [--id <n>]` | Verification checkpoint — confirms a fix actually works, marking the entry resolved. Attribution is inherited from the fix-plan's origin (§4.6), not declared here. |
+| `build-dashboard` | Aggregates all `index-fragments/*.json` into `JOURNAL/index.json` (§8.1), then regenerates `index.html` from it. Also runs automatically after several other commands (§8) — this is the manual/on-demand entry point. |
 
 ---
 
 ## 12. Open Questions / Deferred Scope
 
-- Whether a feature's manual test checklist completion status surfaces in the dashboard.
+- **Decided against for now (not fully open):** surfacing a feature's manual test checklist completion status in the dashboard — see §8.
 - **Team collaboration, still open:** shared understanding across multiple contributors (attribution now shows *who*, per §5, but doesn't address whether each person actually understood what they committed), and whether `index.html` should be `.gitignore`d as a generated artifact (currently committed as-is). Deliberately unaddressed until real multi-person use surfaces what actually breaks.
-- Generalization of JOURNAL beyond coding (research, data science, project management).
-- Degree-of-collaboration attribution scoring via before/after diffs, and scoring based on full `brain-dump.md`/`sketch.md`/`test-outline.md` round history rather than just the latest state — deferred until there's a clearer need/use case.
+- Degree-of-collaboration attribution scoring via before/after diffs, and scoring based on a version's full round history rather than just its latest state — deferred until there's a clearer need/use case.
 - Per-step AI provider configuration, and adapters for providers beyond Claude.
 - Whether `draft code` should show a short outline/preview of planned code structure before writing full implementation.
 - Upgrading annotation matching (§6.6) from textual to semantic/conceptual — this also affects the dependency safety net in §4.8, which relies on the same textual matching.
 - Overlaying *actual* Code-level dependencies against *declared* ones (§4.8) once real static analysis exists.
 - A terminal-only `deps <feature>` command (§4.8) was cut in favor of the dashboard's graph toggle alone — worth reconsidering only if checking the dashboard mid-coding turns out to be real, repeated friction in practice.
-- Additional comprehension-verification mechanisms discussed but not committed: trusted/standard vs. core-logic marking with a different comprehension bar; tracking concepts the user has demonstrated understanding of over time; AI-generated comprehension questions after a step is drafted. Deliberately not built yet — the author wants to first test whether the Logic-first flow, code annotations, and the test checklist together resolve the comprehension gap before adding more machinery.
+- **Interactive dashboard — collapse/expand.** Letting the user minimize a feature's steps down to just its heading, to focus on one feature at a time without the full list always expanded. Idea from v2 testing, not yet designed.
+- **Interactive dashboard — drag-to-reorder.** Manually reordering features (and possibly groups) visually on the dashboard, rather than only the automatic simplest-to-hardest ordering (§8). Idea from v2 testing, not yet designed.
+- **`log-error` location flag.** A way to indicate whether a logged error occurred in the code itself or during testing, since errors can originate from either. Idea from v2 testing, not yet designed — worth considering alongside the existing automatic test-failure logging (§4.6), which already implicitly know it came from a test; this would extend that distinction to manually-logged errors too.

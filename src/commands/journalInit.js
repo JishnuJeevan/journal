@@ -1,22 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
 import prompts from 'prompts';
-import { findProjectRoot, stepDir, stepFile, fragmentFile } from '../lib/paths.js';
+import { findProjectRoot, stepDir, stepFile, fragmentFile, styleFile, srsBrainDumpFile, srsFeaturesFile } from '../lib/paths.js';
 import { featureExists, saveFeature, loadFeature, newFeatureEntry, nextOrder } from '../lib/index-store.js';
 import { stageAndCommit } from '../lib/git.js';
-import { proposeFeaturesFromCode, proposeSteps } from '../lib/ai.js';
+import { proposeSteps } from '../lib/ai.js';
+import { deriveFeaturesFromCode } from './draftFeatures.js';
+import { init } from './init.js';
 import { writeStepFile } from '../lib/frontmatter.js';
 import { defaultBodyForStep, newStepFrontmatter } from '../lib/templates.js';
 import { buildDashboard } from './buildDashboard.js';
-
-function listTrackedFiles(root) {
-  const out = execFileSync('git', ['ls-files'], { cwd: root, encoding: 'utf8' });
-  return out
-    .split('\n')
-    .filter(Boolean)
-    .filter((p) => !p.startsWith('JOURNAL/') && !p.startsWith('node_modules/'));
-}
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -24,19 +17,24 @@ function todayIso() {
 
 export async function journalInit() {
   const root = findProjectRoot();
-  const files = listTrackedFiles(root);
 
-  if (files.length === 0) {
+  // §9.1: a one-time bootstrap — scaffold JOURNAL/SRS/ if `journal init` hasn't run yet,
+  // rather than requiring it as a separate manual step first.
+  if (!fs.existsSync(styleFile())) {
+    await init();
+  }
+
+  // §9.1/§9.2: triggers `draft features`'s own code-scanning branch — one scanning
+  // mechanism, not a separate one duplicated here.
+  const proposed = await deriveFeaturesFromCode(root);
+  if (!proposed) {
     console.log('No tracked files found to bootstrap from.');
     return;
   }
 
-  console.log(`Asking Claude to propose a feature decomposition for ${files.length} tracked file(s)...\n`);
-  const proposed = await proposeFeaturesFromCode(files.join('\n'));
-
   const choices = proposed.map((f) => ({
     title: `${f.name}${featureExists(f.slug) ? ' (already registered)' : ''}`,
-    description: `${f.slug} — ${f.description}${f.group ? ` [${f.group}]` : ''} — ${(f.codePaths || []).length} path(s)`,
+    description: `${f.slug} — ${f.description} — ${(f.codePaths || []).length} path(s)`,
     value: f,
     selected: !featureExists(f.slug),
     disabled: featureExists(f.slug),
@@ -64,14 +62,16 @@ export async function journalInit() {
   }
 
   const root2 = root;
-  const relPaths = [];
+  const relPaths = [path.relative(root2, srsBrainDumpFile()), path.relative(root2, srsFeaturesFile())];
   let order = nextOrder();
 
   for (const f of selected) {
     console.log(`\nAsking Claude to propose a step pipeline for "${f.slug}"...`);
     const { steps } = await proposeSteps(f.slug, f.description);
 
-    const entry = newFeatureEntry({ name: f.name, description: f.description, group: f.group ?? null, order: order++ });
+    // §2/§9.2: group is manual-only — never assigned from an AI proposal, even journal-init's
+    // code-scan one.
+    const entry = newFeatureEntry({ name: f.name, description: f.description, group: null, order: order++ });
     entry.codePaths = f.codePaths || [];
     entry.steps = steps;
     entry.currentVersion = 1;

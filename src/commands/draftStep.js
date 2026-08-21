@@ -2,13 +2,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   findProjectRoot, stepFile, brainDumpFile, sketchFile, codeAnnotationsFile,
-  testOutlineFile, testFile, styleFile, architectureFile, JOURNAL_DIRNAME,
+  testOutlineFile, testFile, styleFile, architectureFile,
 } from '../lib/paths.js';
 import { loadFeature, saveFeature, getCurrentVersion } from '../lib/index-store.js';
 import { readStepFile, writeStepFile } from '../lib/frontmatter.js';
-import { appendRound, readOrEmpty, hasContent, KNOWN_STEP_TEMPLATES } from '../lib/templates.js';
+import { appendRound, readOrEmpty, readWithComponentOverride, hasContent, KNOWN_STEP_TEMPLATES } from '../lib/templates.js';
 import { contentHash, hashOfFiles } from '../lib/hash.js';
 import { checkLogicIntegrity } from '../lib/logicIntegrity.js';
+import { assertSafeRelPath } from '../lib/safePath.js';
 import { getLastAiModel, loadConfig } from '../lib/ai-providers/provider.js';
 import {
   draftLogic as aiDraftLogic,
@@ -31,18 +32,6 @@ function requireStepInPipeline(entry, feature, step) {
       `Feature "${feature}" has no "${step}" step in its pipeline (steps: ${entry.steps ? entry.steps.join(', ') : 'none locked yet'}).`
     );
   }
-}
-
-function assertSafeRelPath(p) {
-  const normalized = path.normalize(p).replace(/^[/\\]+/, '');
-  const segments = normalized.split(path.sep);
-  if (path.isAbsolute(p) || segments.includes('..')) {
-    throw new Error(`AI proposed an unsafe path "${p}" — refusing to write outside the project.`);
-  }
-  if (segments[0] === JOURNAL_DIRNAME) {
-    throw new Error(`AI proposed writing into "${p}", inside ${JOURNAL_DIRNAME}/ — that's this tool's own bookkeeping, not runnable project code. Refusing to write it.`);
-  }
-  return normalized;
 }
 
 function logicContent(feature) {
@@ -99,7 +88,7 @@ async function draftLogicStep(entry, feature, brainDump, opts) {
       ? `Asking Claude to organize your brain dump into a "${feature}" logic draft...\n`
       : `Asking Claude to draft a starting point for "${feature}" logic...\n`
   );
-  const architectureText = readOrEmpty(architectureFile());
+  const architectureText = readWithComponentOverride(architectureFile(), entry.group);
   const draft = await aiDraftLogic(feature, entry.description, hasHistory ? history : null, previousDraft, architectureText);
 
   writeStepFile(file, parsed.data, DRAFT_BANNER + draft + '\n');
@@ -132,7 +121,7 @@ async function draftCodeStep(entry, feature, sketch, opts) {
   }
   const sketchHistory = readOrEmpty(skFile);
   const logicText = logicContent(feature);
-  const styleText = readOrEmpty(styleFile());
+  const styleText = readWithComponentOverride(styleFile(), entry.group);
 
   console.log(`Asking Claude to write code for "${feature}" from its committed Logic...\n`);
   const { files, notes } = await aiDraftCode(feature, { logicText, styleText, sketchHistory });
@@ -230,7 +219,7 @@ async function draftTestStep(entry, feature) {
   }
 
   const outlineText = fs.readFileSync(outlinePath, 'utf8');
-  const styleText = readOrEmpty(styleFile());
+  const styleText = readWithComponentOverride(styleFile(), entry.group);
   const config = loadConfig();
 
   console.log(`Asking Claude to generate real test content for "${feature}"...\n`);

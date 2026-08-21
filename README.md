@@ -1,7 +1,8 @@
 # JOURNAL
 
-A CLI for a development methodology built around four principles: **engagement**,
-**understanding**, **provenance**, and **friction against blind acceptance** of AI output.
+A CLI for spec-driven development that's atomic and active: every feature gets its own
+Logic (a spec, written before its Code), and the tool actively checks that code stays honest
+to it as things change — rather than one project-wide spec, written once and left to go stale.
 
 Every feature in a project is decomposed into **steps** (default: Logic → Code → Test →
 Document, customizable per feature). Each step is tagged with attribution — `person`, `ai`, or
@@ -46,19 +47,31 @@ flags to pass through to `claude -p` can be set via `JOURNAL_CLAUDE_CLI_ARGS`.
 
 ```bash
 cd your-project        # must be a git repo
-journal init             # scaffolds JOURNAL/ (index-fragments/, config.json, style.md, architecture.md)
+journal init             # scaffolds JOURNAL/ (index-fragments/, config.json, SRS/style.md,
+                          # SRS/architecture.md, SRS/brain-dump.md)
 
 # --- starting a new project ---
-journal list-features "brain dump of what you're building"
-# → AI proposes features, ordered simplest-to-hardest to implement; you confirm which to
-#   register. Features start ungrouped — group them yourself once you see how they cluster:
+journal draft-features "brain dump of what you're building"
+# → appends your text to JOURNAL/SRS/brain-dump.md as a new labeled round, then AI derives a
+#   feature list into JOURNAL/SRS/features.md, ordered simplest-to-hardest to implement. Open
+#   features.md and edit freely — reword, merge, split, or delete an entry — then:
+journal commit-features
+# → registers every feature still listed. Re-run draft-features any time to add more (re-derives
+#   features.md from the full current brain-dump.md; never auto-removes a previously-tracked
+#   feature, just flags it if one seems to have dropped out of the current brain dump).
+#   Features start ungrouped, always — nothing here or in journal-init's code scan ever assigns
+#   a group. Group them yourself once you see how they cluster:
 journal set-group password-reset signup authentication   # last arg is the group name
 journal add-feature password-reset "..." --group authentication   # or add one at a time
+#   (add-feature is for a deliberate one-off addition, e.g. an integration-test pseudo-feature —
+#   it skips the features.md review step, but still logs into SRS/brain-dump.md's history)
 
 # --- or bootstrapping onto an existing codebase ---
 journal journal-init
-# → scans tracked files, proposes a feature decomposition + pipeline per feature, snapshots
-#   Code immediately with attribution "legacy"; Logic/Test/Document left blank. Safe to re-run.
+# → scaffolds JOURNAL/ for you if you haven't run init yet, then scans tracked files (the same
+#   code-scanning branch draft-features falls back to) and proposes a feature decomposition +
+#   pipeline per feature, snapshots Code immediately with attribution "legacy"; Logic/Test/
+#   Document left blank. Safe to re-run. Same as above: nothing here is pre-grouped.
 
 journal list-steps user-authentication
 # → AI proposes a step pipeline (default: logic, code, test, document), you confirm/edit.
@@ -67,13 +80,15 @@ journal list-steps user-authentication
 
 # --- Logic: the human's own understanding is the product ---
 journal draft logic user-authentication "users log in with email + magic link, session in a cookie"
-# → adds this to JOURNAL/features/user-authentication/logic/brain-dump.md (a persistent, round-
-#   labeled history) and has AI organize the FULL history into logic.md — never inventing logic
-#   you didn't provide. Bare `journal draft logic user-authentication` (no text) improvises from
-#   just the feature's name + description instead; `--file` reads brain-dump.md's current
-#   content directly, for when you've written a lot there instead of passing it inline.
-# also reads JOURNAL/architecture.md as background context (project-wide system shape), so the
-# feature's Logic stays consistent with the bigger picture without restating it
+# → adds this to JOURNAL/features/user-authentication/logic/brain-dump.md (a round-labeled
+#   history for THIS version — reset fresh on new-version) and has AI organize the full current
+#   history into logic.md — never inventing logic you didn't provide. Bare
+#   `journal draft logic user-authentication` (no text) improvises from just the feature's name +
+#   description instead; `--file` reads brain-dump.md's current content directly, for when
+#   you've written a lot there instead of passing it inline.
+# also reads JOURNAL/SRS/architecture.md as background context (project-wide system shape, plus
+# an optional per-group override section — see §7 below), so the feature's Logic stays
+# consistent with the bigger picture without restating it
 # Name a cross-feature dependency by adding a line "depends-on: other-feature-slug" (§4.8) —
 # extracted at commit time, feeds the dashboard's dependency graph.
 # Edit the draft into your own words, then:
@@ -86,7 +101,8 @@ journal commit logic user-authentication
 # --- Code: AI implements from committed Logic ---
 journal draft code user-authentication ["optional code-level sketch"]
 # → writes real files into src/ (paths inferred from Logic), flags unfamiliar terms not implied
-#   by Logic into code/annotations.md, links the written paths as this feature's codePaths
+#   by Logic into code/annotations.md, links the written paths as this feature's codePaths.
+#   Also reads JOURNAL/SRS/style.md (+ per-group override) before generating.
 journal commit code user-authentication
 # scans imports to record external packages as this feature's `libraries` (§6.2), and warns
 # (non-blocking) if code imports another feature's files without a matching `depends-on:` (§4.8)
@@ -100,24 +116,31 @@ journal draft test user-authentication
 #   with a "how to run" section and instructions for what to write next to each manual checkbox
 journal commit test user-authentication
 # blocks until your test command passes AND every manual checklist item is checked off; stamps
-# test.md with when/how it was last verified
+# test.md with when/how it was last verified. A REAL test failure (not just an unchecked manual
+# item) auto-opens an error entry with the failing output captured — see the errors lifecycle below.
 
-# --- Errors: log, diagnose, fix, resolve ---
+# --- Errors: log, plan a fix, apply it, verify it ---
 npm test 2>&1 | journal log-error user-authentication "trying to log in with a valid magic link"
 # pipe fills the raw error-output slot automatically; the second arg is your own description
 journal fix-error user-authentication
-# reads the error + committed Logic + code, appends a plain-language diagnosis (why it likely
-# happened, a suggested approach) to errors/diagnosis.md — never edits code (§4.6, deliberate:
-# an error is the highest-leverage moment for actually understanding the bug yourself)
-# you write the real fix, then:
-journal resolve-error user-authentication "fixed the magic-link expiry check"
+# organize-not-invent, same pattern as Logic: give your own fix steps as an argument and AI
+# organizes them (attribution person), or leave it blank and AI proposes a diagnosis + fix steps
+# (attribution ai). Appended as a new round to errors/fix-plan.md, cross-referenced by error id —
+# review/edit that file directly if you want, same as test-outline.md. Never edits code itself.
+journal apply-fix user-authentication
+# reads the current fix-plan and writes the actual code fix — the only place AI writes an error
+# fix, and only because a reviewed plan already exists behind it
+# review + test the fix yourself, then:
+journal resolve-error user-authentication "confirmed the magic-link expiry check now works"
+# no --agent flag: attribution is inherited automatically from whoever's fix-plan it was (person
+# if you gave the steps, ai if AI proposed them) — nothing to declare at resolve time
 
 # --- Document: drafts from committed Logic + Code ---
 journal draft document user-authentication ["or your own notes to organize instead"]
 journal commit document user-authentication
 
 # JOURNAL/index.html is regenerated automatically after every `journal commit` (and after
-# init/list-features/add-feature/set-group/etc.) — never hand-edit it.
+# init/journal-init/draft-features/commit-features/add-feature/set-group/etc.) — never hand-edit it.
 
 # later, when the feature needs to change materially:
 journal new-version user-authentication
@@ -129,21 +152,23 @@ journal new-version user-authentication
 
 | Command | Purpose |
 |---|---|
-| `journal init` | Scaffold `JOURNAL/` in the current git repo. |
-| `journal journal-init` | One-time bootstrap for an existing codebase: proposes features + pipelines from tracked files, snapshots Code with attribution `legacy`. Safe to re-run. |
-| `journal list-features "<brain dump>"` | AI proposes features, ordered simplest-to-hardest; you confirm which to register. Features start ungrouped. |
-| `journal add-feature <name> ["desc"] [-g/--group <name>]` | Register a single feature. |
+| `journal init` | Scaffold `JOURNAL/` in the current git repo, including `JOURNAL/SRS/`. |
+| `journal journal-init` | One-time bootstrap for an existing codebase: proposes features + pipelines from tracked files (same code-scanning branch as `draft-features`), snapshots Code with attribution `legacy`. Safe to re-run. |
+| `journal draft-features ["<brain dump>"] [--file]` | SRS-driven feature discovery: appends to `JOURNAL/SRS/brain-dump.md` and (re)derives `JOURNAL/SRS/features.md`, or scans existing tracked code if the brain dump is still empty. Ordered simplest-to-hardest; features start ungrouped. |
+| `journal commit-features` | Reviews `JOURNAL/SRS/features.md` and registers every newly-listed feature. Never auto-removes a previously-tracked feature — flags a mismatch instead. |
+| `journal add-feature <name> ["desc"] [-g/--group <name>]` | Register a single feature directly (skips the features.md review step); still logged into `SRS/brain-dump.md`'s history. |
 | `journal set-group <feature...> [<group-name>]` | Assign a group tag to one or more features; omit the group name to clear it. |
 | `journal rename-group <old> [<new>]` | Retag every feature currently tagged `<old>`; omit `<new>` to ungroup them instead. |
 | `journal remove-feature <feature>` | Mark a feature removed (hidden by default in the dashboard) — doesn't delete its JOURNAL history. |
 | `journal list-steps <feature> [-d "description"]` | AI proposes a step pipeline; you confirm/edit, then it's locked in. Pre-creates brain-dump.md/sketch.md/test-outline.md. |
 | `journal add-step <feature> <stepName>` | Register an additional step for a feature already underway. |
-| `journal draft <step> <feature> ["description"] [--file]` | AI drafts (or organizes your notes into) content for a step. `--file` reads the round file directly instead of an inline arg. Step-specific: Logic manages a persistent `brain-dump.md`; Code writes real files under `src/` + `annotations.md`; Test is two-phase (outline, then real content); Document drafts from committed Logic+Code; any other step follows description/template/blank. |
-| `journal commit <step> <feature> [--add-path <path>]` | Commit the step. Attribution + identity are auto-detected (never asked). `commit test` blocks until automated tests pass and the manual checklist is fully checked. Dashboard is rebuilt (and committed) automatically afterward. |
+| `journal draft <step> <feature> ["description"] [--file]` | AI drafts (or organizes your notes into) content for a step. `--file` reads the round file directly instead of an inline arg. Step-specific: Logic manages a per-version `brain-dump.md`; Code writes real files under `src/` + `annotations.md`; Test is two-phase (outline, then real content); Document drafts from committed Logic+Code; any other step follows description/template/blank. |
+| `journal commit <step> <feature>` | Commit the step. Attribution + identity are auto-detected (never asked). `commit test` blocks until automated tests pass and the manual checklist is fully checked, and auto-logs an error entry on a real test failure. Dashboard is rebuilt (and committed) automatically afterward. |
 | `journal new-version <feature>` | Start a new revision pass; archives brain-dump/sketch/outline/code/test history and resets working files. |
 | `journal log-error <feature> [errorOutput] [description]` | Append an open entry to the feature's Errors log. Pipe output in (`npm test \| journal log-error x "what I was doing"`) to fill `errorOutput` automatically. |
-| `journal fix-error <feature> [--id <n>]` | Diagnose a logged error (Logic + code as context) — appended to `errors/diagnosis.md`. Never edits code; defaults to the most recent open error. |
-| `journal resolve-error <feature> ["fix note"] [--id <n>] [--agent]` | Resolve the most recent open error (or a specific one). `--agent` marks attribution `ai`. |
+| `journal fix-error <feature> ["steps"] [--id <n>] [--file]` | Organize-not-invent, same pattern as `draft`: give your own fix steps (attribution `person`) or leave blank for an AI-proposed diagnosis + fix steps (attribution `ai`). Appends a round to `errors/fix-plan.md`, cross-referenced by error id. Never edits code; defaults to the most recent open error. |
+| `journal apply-fix <feature> [--id <n>]` | Reads the current fix-plan and writes the actual code fix — the only place AI is allowed to write an error fix, and only because a reviewed plan already exists. |
+| `journal resolve-error <feature> ["fix note"] [--id <n>]` | Verification checkpoint — confirms a fix actually works, marking the entry resolved. Attribution is inherited from the fix-plan's origin, not declared here. |
 | `journal build-dashboard` | Aggregate `index-fragments/*.json` into `index.json`, then regenerate `index.html` (also runs automatically after most commands). |
 
 ## Attribution & identity (spec §5)
@@ -153,6 +178,7 @@ Never asked interactively — computed from tool usage at commit time:
 - **Logic / Document / custom steps:** `person` if the step's `brain-dump.md` has content, `ai` if not.
 - **Code:** `person` if `code/sketch.md` has content, `ai` if not.
 - **Test:** `person` if `test-outline.md` was edited from what AI proposed, `ai` if not.
+- **A resolved error:** inherited from whichever origin its `fix-plan.md` entry had — `person` if you gave the fix steps, `ai` if AI proposed them.
 - **Any step that was never drafted at all** (hand-authored from scratch, bypassing `draft` entirely) is `person`.
 - **`legacy`** is only set by `journal-init`'s bootstrap of pre-existing code.
 
@@ -194,10 +220,24 @@ hand-edit it or the fragments directly.
 
 Rebuilt automatically after most commands, from `src/lib/dashboard-template.html` (an interactive
 template — search, per-feature version chips, an expandable Errors panel, a List/Graph toggle)
-with the real aggregated `JOURNAL/index.json` data injected in. Historical (non-current) versions
-show their attribution/identity/SHA/date; Code and Test link to a locally-archived snapshot when
-one exists (`code-v1/`, `test.v1.md`), and otherwise show a `git show <sha>:<path>` command to
-view that content directly, since step files are overwritten each version (§6.3).
+with the real aggregated `JOURNAL/index.json` data injected in. Only the *current* version of a
+feature ever shows a real, clickable link to its step content — a non-current version always
+shows a copyable `git show <sha>[:path]` hint instead, since step files are overwritten each
+version (§6.3), even for code/test steps that happen to have a locally-archived snapshot
+(`code-v1/`, `test.v1.md`).
+
+## Project-level style, architecture, and features (`JOURNAL/SRS/`, spec §7, §9.2)
+
+Everything project-wide (not per-feature) lives under `JOURNAL/SRS/`:
+
+- **`style.md`** — code style + testing preferences, read by `draft code`/`draft test` every time they run.
+- **`architecture.md`** — project-wide system shape, read by `draft logic` as background context.
+- **`brain-dump.md`** / **`features.md`** — the feature-discovery pair `draft-features`/`commit-features` read and write.
+
+Both `style.md` and `architecture.md` support an optional **per-group override section** — most
+projects only need the global rules at the top, but a `## <group-name>` heading (matching a
+feature's group tag) lets a specific component carry its own additional notes, read alongside
+the global rules for features tagged with that group.
 
 ## AI provider architecture (spec §10)
 

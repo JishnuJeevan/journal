@@ -50,6 +50,7 @@
   .step-btn .step-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-left: 6px; }
   .no-pipeline { font-size: 0.8rem; color: var(--muted); font-style: italic; }
   .historical-hint { font-size: 0.7rem; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .historical-hint code { display: inline-block; background: rgba(127,127,127,0.1); border-radius: 4px; padding: 1px 5px; font-size: 0.7rem; margin: 1px 0; }
 
   .paths { font-size: 0.75rem; color: var(--muted); margin: 0 0 0.6rem; }
   .paths a { color: var(--ai); text-decoration: none; }
@@ -131,7 +132,21 @@ function identityLabel(sd) {
   return sd.attribution + (who ? " · " + who : "");
 }
 
-function renderStepGrid(feature, version) {
+function renderHistoricalHint(feature, version) {
+  // §6.3/§8: the dashboard is a static file and can't run git itself — for a
+  // non-current version, show the exact `git show` command to run in a
+  // terminal instead of baking old content into index.json (kept lightweight).
+  const steps = feature.steps.filter(s => version.stepData[s] && version.stepData[s].sha);
+  if (!steps.length) return "";
+  const lines = steps.map(s => {
+    const sd = version.stepData[s];
+    const path = sd.fileUrl || (s + "/" + s + ".md");
+    return "<code>git show " + sd.sha + ":" + path + "</code>";
+  }).join("<br>");
+  return '<div class="historical-hint"><p style="font-size:11px; color:var(--muted); margin:6px 0 2px;">Historical version — view with:</p><p style="margin:0;">' + lines + "</p></div>";
+}
+
+function renderStepGrid(feature, version, isCurrent) {
   if (!feature.pipelineSet) {
     return '<p class="no-pipeline">Step pipeline not yet locked in — run <code>journal list-steps ' + feature.slug + '</code>.</p>';
   }
@@ -140,17 +155,16 @@ function renderStepGrid(feature, version) {
     const color = sd.attribution ? DOT_COLOR[sd.attribution] : DOT_COLOR.none;
     const inner = '<span>' + STEP_LABEL(step) + '</span><span class="step-dot" style="background:' + color + '"></span>';
     const title = identityLabel(sd) ? ' title="' + identityLabel(sd) + '"' : "";
-    if (sd.fileUrl) {
+    // Only the current version's step content is a real, clickable file link —
+    // an old version's file has been overwritten by now, so linking to it
+    // would show the wrong (current) content.
+    if (isCurrent && sd.fileUrl) {
       return '<a class="step-btn" href="' + sd.fileUrl + '"' + title + '>' + inner + '</a>';
-    }
-    if (sd.historicalHint) {
-      // No locally-archived file for this past version (§6.3) — offer the exact
-      // command to view it instead of a dead link.
-      return '<span class="step-btn" style="opacity:0.75; cursor:default; flex-direction:column; align-items:flex-start; gap:2px;"' + title + '>' + inner + '<code class="historical-hint">' + sd.historicalHint + '</code></span>';
     }
     return '<span class="step-btn" style="opacity:0.6; cursor:default;"' + title + '>' + inner + '</span>';
   }).join("");
-  return '<div class="step-grid">' + cells + '</div>';
+  const grid = '<div class="step-grid">' + cells + '</div>';
+  return isCurrent ? grid : grid + renderHistoricalHint(feature, version);
 }
 
 function renderVersionChips(feature) {
@@ -208,7 +222,7 @@ function renderFeature(feature) {
       '</div>' +
       '<p class="desc">' + feature.description + '</p>' +
       renderVersionChips(feature) +
-      renderStepGrid(feature, v) +
+      '<div class="step-area">' + renderStepGrid(feature, v, true) + '</div>' +
       paths +
       libraries +
       renderErrorsSection(feature) +
@@ -300,8 +314,8 @@ function wireInteractions() {
       const version = feature.versions.find(v => v.version === targetV);
       const card = document.querySelector('.feature[data-slug="' + slug + '"]');
       card.querySelectorAll(".v-chip").forEach(c => c.classList.toggle("active", Number(c.getAttribute("data-v")) === targetV));
-      const grid = card.querySelector(".step-grid");
-      if (grid) grid.outerHTML = renderStepGrid(feature, version);
+      const area = card.querySelector(".step-area");
+      if (area) area.innerHTML = renderStepGrid(feature, version, version.current);
       card.querySelector(".status").textContent = feature.steps.filter(s => version.stepData[s] && version.stepData[s].attribution).length + " / " + feature.steps.length + " steps · v" + version.version;
       wireInteractions();
     });

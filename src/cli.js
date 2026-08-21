@@ -1,7 +1,8 @@
 import { Command } from 'commander';
 import { init } from './commands/init.js';
 import { journalInit } from './commands/journalInit.js';
-import { listFeatures } from './commands/listFeatures.js';
+import { draftFeatures } from './commands/draftFeatures.js';
+import { commitFeatures } from './commands/commitFeatures.js';
 import { addFeature } from './commands/addFeature.js';
 import { setGroup } from './commands/setGroup.js';
 import { renameGroup } from './commands/renameGroup.js';
@@ -14,6 +15,7 @@ import { newVersion } from './commands/newVersion.js';
 import { logError } from './commands/logError.js';
 import { resolveError } from './commands/resolveError.js';
 import { fixError } from './commands/fixError.js';
+import { applyFix } from './commands/applyFix.js';
 import { buildDashboard } from './commands/buildDashboard.js';
 
 function collect(value, previous) {
@@ -49,9 +51,15 @@ export function buildProgram() {
     .action(run(journalInit));
 
   program
-    .command('list-features <brainDump>')
-    .description('Propose a feature list from a free-form project description (AI-assisted, human confirms). Ordered simplest-to-hardest; features start ungrouped — use set-group afterward.')
-    .action(run(listFeatures));
+    .command('draft-features [brainDump]')
+    .description('SRS-driven feature discovery (§9.2, replaces list-features): appends to JOURNAL/SRS/brain-dump.md and (re)derives JOURNAL/SRS/features.md from it, or scans existing tracked code if the brain dump is still empty. Ordered simplest-to-hardest; features start ungrouped — use set-group after commit-features.')
+    .option('--file', 'read the brain dump from JOURNAL/SRS/brain-dump.md directly instead of an inline description')
+    .action(run((brainDump, opts) => draftFeatures(brainDump, opts)));
+
+  program
+    .command('commit-features')
+    .description('Reviews JOURNAL/SRS/features.md and registers every newly-listed feature. Never auto-removes a previously-tracked feature — flags a mismatch instead.')
+    .action(run(commitFeatures));
 
   program
     .command('add-feature <name> [description]')
@@ -108,16 +116,22 @@ export function buildProgram() {
     .action(run(logError));
 
   program
-    .command('fix-error <feature>')
-    .description("Diagnose a logged error (Logic + code as context) and append the diagnosis to errors/diagnosis.md — read-only, never edits code. Defaults to the most recent open error.")
-    .option('--id <n>', 'diagnose a specific error entry by id')
-    .action(run((feature, opts) => fixError(feature, opts)));
+    .command('fix-error <feature> [steps]')
+    .description("Organize-not-invent, same pattern as draft: give your own fix steps (attribution person) or leave blank for an AI-proposed diagnosis + fix steps (attribution ai). Appends a round to errors/fix-plan.md, cross-referenced by error id. Never edits code. Defaults to the most recent open error.")
+    .option('--id <n>', 'target a specific error entry by id')
+    .option('--file', 'read the fix steps from errors/fix-plan.md directly instead of an inline description')
+    .action(run((feature, steps, opts) => fixError(feature, steps, opts)));
+
+  program
+    .command('apply-fix <feature>')
+    .description("Reads the current fix-plan and writes the actual code fix — the only place AI is allowed to write an error fix, and only because a reviewed plan already exists.")
+    .option('--id <n>', 'apply a specific error entry\'s plan by id')
+    .action(run((feature, opts) => applyFix(feature, opts)));
 
   program
     .command('resolve-error <feature> [fixNote]')
-    .description('Mark the most recent open error resolved (or a specific one via --id)')
+    .description('Verification checkpoint — confirms a fix actually works and marks the entry resolved (or a specific one via --id). Attribution is inherited from the fix-plan\'s origin (§4.6), not declared here.')
     .option('--id <n>', 'resolve a specific error entry by id')
-    .option('--agent', 'mark attribution as ai (invoked autonomously by an agent)')
     .action(run((feature, fixNote, opts) => resolveError(feature, fixNote, opts)));
 
   program

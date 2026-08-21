@@ -54,7 +54,7 @@ export function loadFeature(feature) {
   const file = fragmentFile(feature);
   if (!fs.existsSync(file)) {
     throw new Error(
-      `Unknown feature "${feature}". Run \`journal list-features\` or \`journal add-feature ${feature} "..."\` first.`
+      `Unknown feature "${feature}". Run \`journal draft-features\`/\`journal commit-features\` or \`journal add-feature ${feature} "..."\` first.`
     );
   }
   try {
